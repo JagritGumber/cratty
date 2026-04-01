@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/cratty_core",
-    "crates/cratty_vt",
     "crates/cratty_app",
 ]
 
@@ -14,8 +13,6 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 cratty_core = { path = "crates/cratty_core" }
-cratty_vt = { path = "crates/cratty_vt" }
-
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

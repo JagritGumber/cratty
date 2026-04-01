@@ -13,7 +13,6 @@ const ICO_MINUS: char = '\u{E32A}';   // minimize
 const ICO_SQUARE: char = '\u{E45E}';  // maximize
 const ICO_X: char = '\u{E4F6}';       // close window
 const ICO_PLUS: char = '\u{E3D4}';    // new tab
-const ICO_X_CIRCLE: char = '\u{E4F8}'; // close tab
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt()
@@ -104,17 +103,16 @@ impl Cratty {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::TermEvent(iced_term::Event::BackendCall(term_id, ref cmd)) => {
-                if let iced_term::BackendCommand::Resize(Some(layout), Some(_)) = cmd {
+            Message::TermEvent(iced_term::Event::BackendCall(term_id, cmd)) => {
+                if let iced_term::BackendCommand::Resize(Some(layout), Some(_)) = &cmd {
                     self.last_size = Some(*layout);
                 }
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == term_id) {
-                    let iced_term::Event::BackendCall(_, cmd) = message.clone().into_term_event();
                     match tab.term.handle(iced_term::Command::ProxyToBackend(cmd)) {
                         iced_term::actions::Action::Shutdown => {
                             self.tabs.retain(|t| t.id != term_id);
                             if self.tabs.is_empty() {
-                                std::process::exit(0);
+                                return with_window(window::close);
                             }
                             self.active_tab = self.active_tab.min(self.tabs.len() - 1);
                         }
@@ -153,7 +151,7 @@ impl Cratty {
                 if idx < self.tabs.len() {
                     self.tabs.remove(idx);
                     if self.tabs.is_empty() {
-                        std::process::exit(0);
+                        return with_window(window::close);
                     }
                     self.active_tab = self.active_tab.min(self.tabs.len() - 1);
                 }
@@ -174,9 +172,7 @@ impl Cratty {
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
-            Message::CloseWindow => {
-                std::process::exit(0);
-            }
+            Message::CloseWindow => with_window(window::close),
         }
     }
 
@@ -381,18 +377,6 @@ fn win_btn(
         ..Default::default()
     })
     .into()
-}
-
-trait IntoTermEvent {
-    fn into_term_event(self) -> iced_term::Event;
-}
-impl IntoTermEvent for Message {
-    fn into_term_event(self) -> iced_term::Event {
-        match self {
-            Message::TermEvent(e) => e,
-            _ => unreachable!(),
-        }
-    }
 }
 
 fn new_terminal(id: u64) -> std::io::Result<iced_term::Terminal> {
