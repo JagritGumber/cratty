@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cratty_core",
+    "crates/cratty_vt",
+    "crates/cratty_app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+cratty_core = { path = "crates/cratty_core" }
+cratty_vt = { path = "crates/cratty_vt" }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Platform dirs
+dirs = "6"
+
+# Config watching
+notify = "7"
+
+# GUI
+iced = { version = "0.14", features = ["canvas", "advanced", "lazy"] }
+iced_term = "0.8"
