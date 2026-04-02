@@ -108,6 +108,7 @@ struct Cratty {
     last_size: Option<iced::Size>,
     renaming: Option<RenameState>,
     tab_menu_open: Option<u64>, // tab ID, not index
+    color_submenu_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +128,7 @@ enum Message {
     RenameInput(String),
     ConfirmRename,
     SetTabColor(u64, Option<Color>),
+    ToggleColorSubmenu,
     EscapePressed,
 }
 
@@ -267,6 +269,7 @@ impl Cratty {
                     last_size: None,
                     renaming: None,
                     tab_menu_open: None,
+                    color_submenu_open: false,
                 };
                 (app, focus)
             }
@@ -279,6 +282,7 @@ impl Cratty {
                     last_size: None,
                     renaming: None,
                     tab_menu_open: None,
+                    color_submenu_open: false,
                 };
                 (app, Task::none())
             }
@@ -336,6 +340,7 @@ impl Cratty {
 
     fn dismiss_menu(&mut self) {
         self.tab_menu_open = None;
+        self.color_submenu_open = false;
     }
 
     /// Whether any UI overlay (menu, rename) is active — used to gate keyboard subscription.
@@ -439,10 +444,15 @@ impl Cratty {
             }
 
             Message::SetTabColor(tab_id, color) => {
-                self.dismiss_menu();
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id) {
                     tab.color = color;
                 }
+                self.dismiss_menu();
+                Task::none()
+            }
+
+            Message::ToggleColorSubmenu => {
+                self.color_submenu_open = !self.color_submenu_open;
                 Task::none()
             }
 
@@ -633,72 +643,6 @@ impl Cratty {
         let tab_id = self.tabs[idx].id;
         let current_color = self.tabs[idx].color;
 
-        // Color swatch row
-        let mut swatches: Vec<Element<Message>> = TAB_COLORS
-            .iter()
-            .map(|(color, _name)| {
-                let c = *color;
-                let is_selected = current_color == Some(c);
-                button(
-                    container(Space::new())
-                        .width(14)
-                        .height(14),
-                )
-                .on_press(Message::SetTabColor(tab_id, Some(c)))
-                .width(18)
-                .height(18)
-                .padding(2)
-                .style(move |_, status| {
-                    let border = if is_selected {
-                        iced::Border { color: FG_ACTIVE, width: 2.0, radius: 3.0.into() }
-                    } else {
-                        match status {
-                            button::Status::Hovered => iced::Border {
-                                color: FG_DIM,
-                                width: 1.0,
-                                radius: 3.0.into(),
-                            },
-                            _ => iced::Border { radius: 3.0.into(), ..Default::default() },
-                        }
-                    };
-                    button::Style {
-                        background: Some(iced::Background::Color(c)),
-                        border,
-                        ..Default::default()
-                    }
-                })
-                .into()
-            })
-            .collect();
-
-        // "Clear" button (✕) to remove color
-        if current_color.is_some() {
-            swatches.push(
-                button(
-                    container(text(ICO_X).size(8).font(PHOSPHOR).color(FG_DIM))
-                        .center_x(14)
-                        .center_y(14),
-                )
-                .on_press(Message::SetTabColor(tab_id, None))
-                .width(18)
-                .height(18)
-                .padding(0)
-                .style(|_, status| button::Style {
-                    background: match status {
-                        button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
-                        _ => None,
-                    },
-                    border: iced::Border { radius: 3.0.into(), ..Default::default() },
-                    ..Default::default()
-                })
-                .into(),
-            );
-        }
-
-        let color_row = container(
-            row(swatches).spacing(2).padding([4, 8]),
-        );
-
         let separator = || {
             container(Space::new())
                 .width(Length::Fill)
@@ -709,28 +653,93 @@ impl Cratty {
                 })
         };
 
-        container(
-            column![
-                menu_item("Rename", Message::StartRename(idx)),
-                menu_item("Duplicate", Message::DuplicateTab(idx)),
-                separator(),
-                container(text("Color").size(11).color(FG_DIM)).padding([4, 16]),
-                color_row,
-                separator(),
-                menu_item("Close", Message::CloseTab(idx)),
-            ]
-            .width(180),
-        )
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(BG_MENU)),
-            border: iced::Border {
-                color: FG_MUTED,
-                width: 1.0,
-                radius: 4.0.into(),
-            },
-            ..Default::default()
-        })
-        .into()
+        // "Color >" button — toggles the color submenu
+        let color_label = row![
+            text("Color").size(12).color(FG_ACTIVE),
+            Space::new().width(Length::Fill),
+            text("›").size(14).color(FG_DIM),
+        ]
+        .width(Length::Fill);
+
+        let color_btn = button(color_label)
+            .on_press(Message::ToggleColorSubmenu)
+            .padding([6, 16])
+            .width(Length::Fill)
+            .style(|_, status| button::Style {
+                background: Some(iced::Background::Color(match status {
+                    button::Status::Hovered => BG_MENU_HOVER,
+                    _ => BG_MENU,
+                })),
+                ..Default::default()
+            });
+
+        let mut items: Vec<Element<Message>> = vec![
+            menu_item("Rename", Message::StartRename(idx)),
+            menu_item("Duplicate", Message::DuplicateTab(idx)),
+            separator().into(),
+            color_btn.into(),
+        ];
+
+        // Expanded color submenu
+        if self.color_submenu_open {
+            let swatches: Vec<Element<Message>> = TAB_COLORS
+                .iter()
+                .map(|(color, _name)| {
+                    let c = *color;
+                    let is_selected = current_color == Some(c);
+                    button(Space::new().width(16).height(16))
+                        .on_press(Message::SetTabColor(tab_id, Some(c)))
+                        .width(22)
+                        .height(22)
+                        .padding(3)
+                        .style(move |_, status| {
+                            let border = if is_selected {
+                                iced::Border { color: FG_ACTIVE, width: 2.0, radius: 4.0.into() }
+                            } else {
+                                match status {
+                                    button::Status::Hovered => iced::Border {
+                                        color: FG_DIM,
+                                        width: 1.0,
+                                        radius: 4.0.into(),
+                                    },
+                                    _ => iced::Border { radius: 4.0.into(), ..Default::default() },
+                                }
+                            };
+                            button::Style {
+                                background: Some(iced::Background::Color(c)),
+                                border,
+                                ..Default::default()
+                            }
+                        })
+                        .into()
+                })
+                .collect();
+
+            items.push(
+                container(row(swatches).spacing(4))
+                    .padding([4, 12])
+                    .into(),
+            );
+
+            if current_color.is_some() {
+                items.push(menu_item("Clear color", Message::SetTabColor(tab_id, None)));
+            }
+        }
+
+        items.push(separator().into());
+        items.push(menu_item("Close", Message::CloseTab(idx)));
+
+        container(column(items).width(180))
+            .style(|_| container::Style {
+                background: Some(iced::Background::Color(BG_MENU)),
+                border: iced::Border {
+                    color: FG_MUTED,
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                ..Default::default()
+            })
+            .into()
     }
 
     fn theme(&self) -> Theme {
