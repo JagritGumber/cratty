@@ -270,7 +270,14 @@ impl Cratty {
         if idx >= self.tabs.len() {
             return Task::none();
         }
+        let removed_id = self.tabs[idx].id;
         self.tabs.remove(idx);
+        self.tab_menu_open = None;
+        if let Some(ref r) = self.renaming {
+            if r.tab_id == removed_id {
+                self.renaming = None;
+            }
+        }
         if self.tabs.is_empty() {
             return with_window(window::close);
         }
@@ -313,11 +320,7 @@ impl Cratty {
                 self.create_tab(idx + 1)
             }
 
-            Message::CloseTab(idx) => {
-                self.dismiss_menu();
-                self.renaming = None;
-                self.close_tab(idx)
-            }
+            Message::CloseTab(idx) => self.close_tab(idx),
 
             Message::SwitchTab(idx) => {
                 if self.renaming.is_some() || idx >= self.tabs.len() {
