@@ -755,21 +755,47 @@ impl Cratty {
             .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
             .collect();
 
-        let row2: Vec<Element<Message>> = TAB_COLORS[4..]
+        let mut row2: Vec<Element<Message>> = TAB_COLORS[4..]
             .iter()
             .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
             .collect();
 
-        let mut items: Vec<Element<Message>> = vec![
-            row(row1).spacing(3).into(),
-            row(row2).spacing(3).into(),
-        ];
-
+        // Add a "clear" swatch (dark with red ✕) as the 9th item in row 2
         if current_color.is_some() {
-            items.push(menu_item("Clear", Message::SetTabColor(tab_id, None)));
+            row2.push(
+                button(
+                    container(text(ICO_X).size(10).font(PHOSPHOR).color(Color::from_rgb(0.8, 0.25, 0.25)))
+                        .center_x(18)
+                        .center_y(18),
+                )
+                .on_press(Message::SetTabColor(tab_id, None))
+                .width(24)
+                .height(24)
+                .padding(0)
+                .style(|_, status| button::Style {
+                    background: Some(iced::Background::Color(match status {
+                        button::Status::Hovered => Color::from_rgb(0.2, 0.2, 0.2),
+                        _ => Color::from_rgb(0.12, 0.12, 0.12),
+                    })),
+                    border: iced::Border {
+                        color: Color::from_rgb(0.8, 0.25, 0.25),
+                        width: 1.0,
+                        radius: 4.0.into(),
+                    },
+                    ..Default::default()
+                })
+                .into(),
+            );
         }
 
-        container(column(items).spacing(3).padding(6))
+        container(
+            column![
+                row(row1).spacing(3),
+                row(row2).spacing(3),
+            ]
+            .spacing(3)
+            .padding(6),
+        )
             .style(|_| container::Style {
                 background: Some(iced::Background::Color(BG_MENU)),
                 border: iced::Border {
