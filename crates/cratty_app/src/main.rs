@@ -154,24 +154,18 @@ fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'s
 
 /// Small icon button used in tabs (close, kebab).
 fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
-    button(
-        container(phosphor_icon(icon, size, fg))
-            .center_x(18)
-            .center_y(18),
-    )
-    .on_press(msg)
-    .width(TAB_ICON_W)
-    .height(TAB_ICON_W)
-    .padding(0)
-    .style(|_, status| button::Style {
-        background: match status {
-            button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
-            _ => None,
-        },
-        border: iced::Border { radius: 3.0.into(), ..Default::default() },
-        ..Default::default()
-    })
-    .into()
+    button(phosphor_icon(icon, size, fg))
+        .on_press(msg)
+        .padding([2, 3])
+        .style(|_, status| button::Style {
+            background: match status {
+                button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
+                _ => None,
+            },
+            border: iced::Border { radius: 3.0.into(), ..Default::default() },
+            ..Default::default()
+        })
+        .into()
 }
 
 /// Window chrome button (minimize / maximize / close).
@@ -773,15 +767,9 @@ impl Cratty {
         if current_color.is_some() {
             // Unicode ╳ (U+2573 BOX DRAWINGS LIGHT DIAGONAL CROSS) stretches corner-to-corner
             row2.push(
-                button(
-                    container(phosphor_icon(ICO_X, 12.0, Color::from_rgb(0.85, 0.2, 0.2)))
-                        .center_x(Length::Fill)
-                        .center_y(Length::Fill),
-                )
+                button(phosphor_icon(ICO_X, 14.0, Color::from_rgb(0.85, 0.2, 0.2)))
                 .on_press(Message::SetTabColor(tab_id, None))
-                .width(24)
-                .height(24)
-                .padding(0)
+                .padding(4)
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
                         button::Status::Hovered => Color::from_rgb(0.2, 0.1, 0.1),
