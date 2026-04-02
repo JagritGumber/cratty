@@ -769,6 +769,8 @@ impl Cratty {
             row2.push(
                 button(phosphor_icon(ICO_X, 14.0, Color::from_rgb(0.85, 0.2, 0.2)))
                 .on_press(Message::SetTabColor(tab_id, None))
+                .width(24)
+                .height(24)
                 .padding(4)
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
