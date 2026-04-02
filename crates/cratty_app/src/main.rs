@@ -766,13 +766,13 @@ impl Cratty {
             row2.push(
                 button(
                     container(
-                        text('\u{2573}')
-                            .size(18)
-                            .line_height(1.0)
+                        text(ICO_X)
+                            .size(14)
+                            .font(PHOSPHOR)
                             .color(Color::from_rgb(0.85, 0.2, 0.2)),
                     )
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill),
+                    .center_x(24)
+                    .center_y(24),
                 )
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
