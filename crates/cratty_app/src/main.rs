@@ -775,8 +775,8 @@ impl Cratty {
             row2.push(
                 button(
                     container(phosphor_icon(ICO_X, 12.0, Color::from_rgb(0.85, 0.2, 0.2)))
-                        .center_x(24)
-                        .center_y(24),
+                        .center_x(Length::Fill)
+                        .center_y(Length::Fill),
                 )
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
