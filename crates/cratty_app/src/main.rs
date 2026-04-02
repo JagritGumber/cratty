@@ -5,6 +5,7 @@ use iced::widget::{
 };
 use iced::window;
 use iced::{event, Color, Element, Font, Length, Subscription, Task, Theme};
+use std::path::{Path, PathBuf};
 
 // Phosphor Bold icon font — embedded at compile time.
 const PHOSPHOR_BOLD_BYTES: &[u8] = include_bytes!("../resources/fonts/Phosphor-Bold.ttf");
@@ -221,7 +222,7 @@ fn rename_input_style(_: &Theme, _: text_input::Status) -> text_input::Style {
 
 impl Cratty {
     fn new() -> (Self, Task<Message>) {
-        match new_terminal(0) {
+        match new_terminal(0, None) {
             Ok(t) => {
                 let focus = iced_term::TerminalView::focus::<Message>(t.widget_id().clone());
                 let app = Self {
@@ -250,10 +251,10 @@ impl Cratty {
     }
 
     /// Create a new tab, insert it at `insert_at`, switch to it.
-    fn create_tab(&mut self, insert_at: usize) -> Task<Message> {
+    fn create_tab(&mut self, insert_at: usize, cwd: Option<PathBuf>) -> Task<Message> {
         let id = self.next_id;
         self.next_id += 1;
-        match new_terminal(id) {
+        match new_terminal(id, cwd) {
             Ok(mut term) => {
                 if let Some(size) = self.last_size {
                     term.handle(iced_term::Command::ProxyToBackend(
@@ -340,12 +341,13 @@ impl Cratty {
 
             Message::NewTab => {
                 self.dismiss_menu();
-                self.create_tab(self.tabs.len())
+                self.create_tab(self.tabs.len(), None)
             }
 
             Message::DuplicateTab(idx) => {
                 self.dismiss_menu();
-                self.create_tab(idx + 1)
+                let cwd = self.tabs.get(idx).and_then(|tab| extract_cwd(&tab.title));
+                self.create_tab(idx + 1, cwd)
             }
 
             Message::CloseTab(idx) => self.close_tab(idx),
@@ -633,7 +635,7 @@ impl Cratty {
 
 // ── Terminal ────────────────────────────────────────────────────────────────
 
-fn new_terminal(id: u64) -> std::io::Result<iced_term::Terminal> {
+fn new_terminal(id: u64, working_directory: Option<PathBuf>) -> std::io::Result<iced_term::Terminal> {
     let (shell, args) = default_shell();
     iced_term::Terminal::new(
         id,
@@ -643,10 +645,28 @@ fn new_terminal(id: u64) -> std::io::Result<iced_term::Terminal> {
             backend: iced_term::settings::BackendSettings {
                 program: shell,
                 args,
+                working_directory,
                 ..Default::default()
             },
         },
     )
+}
+
+/// Try to extract a valid directory path from a terminal title.
+/// PowerShell/bash typically set the title to the current directory.
+fn extract_cwd(title: &str) -> Option<PathBuf> {
+    // PowerShell titles can be "Administrator: C:\path" or just "C:\path"
+    let candidate = title
+        .strip_prefix("Administrator: ")
+        .unwrap_or(title)
+        .trim();
+
+    let path = Path::new(candidate);
+    if path.is_absolute() && path.is_dir() {
+        Some(path.to_path_buf())
+    } else {
+        None
+    }
 }
 
 fn default_shell() -> (String, Vec<String>) {
