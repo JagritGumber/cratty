@@ -72,9 +72,12 @@ impl Tab {
     }
 
     /// Estimate the rendered width of this tab button.
-    fn estimated_width(&self) -> f32 {
-        let char_count = self.display_title().chars().count().min(20) as f32;
-        let text_w = char_count * TAB_CHAR_W;
+    fn estimated_width(&self, is_renaming: bool) -> f32 {
+        let text_w = if is_renaming {
+            120.0 // text_input has explicit width(120)
+        } else {
+            self.display_title().chars().count().min(20) as f32 * TAB_CHAR_W
+        };
         // text + gap + dots icon + gap + close icon + horizontal padding both sides
         text_w + TAB_ICON_GAP + TAB_ICON_W + TAB_ICON_GAP + TAB_ICON_W + TAB_PAD_H * 2.0
     }
@@ -481,7 +484,8 @@ impl Cratty {
             if i == idx {
                 break;
             }
-            x += tab.estimated_width() + TAB_ROW_SPACING;
+            let is_renaming = self.renaming.as_ref().is_some_and(|r| r.tab_id == tab.id);
+            x += tab.estimated_width(is_renaming) + TAB_ROW_SPACING;
         }
         x
     }
@@ -653,20 +657,54 @@ fn new_terminal(id: u64, working_directory: Option<PathBuf>) -> std::io::Result<
 }
 
 /// Try to extract a valid directory path from a terminal title.
-/// PowerShell/bash typically set the title to the current directory.
+/// Shells set the title in various formats — we try common patterns.
 fn extract_cwd(title: &str) -> Option<PathBuf> {
-    // PowerShell titles can be "Administrator: C:\path" or just "C:\path"
-    let candidate = title
-        .strip_prefix("Administrator: ")
-        .unwrap_or(title)
-        .trim();
+    tracing::debug!("extract_cwd from title: {:?}", title);
 
-    let path = Path::new(candidate);
-    if path.is_absolute() && path.is_dir() {
-        Some(path.to_path_buf())
-    } else {
-        None
+    let candidates: Vec<&str> = vec![
+        title.trim(),
+        // "Administrator: C:\path"
+        title.strip_prefix("Administrator: ").unwrap_or("").trim(),
+        // "MINGW64:/c/Users/foo" → skip
+        // "user@host: ~/projects" → skip (not absolute on Windows)
+    ];
+
+    // Also try to find a Windows path (X:\...) or Unix path (/...) anywhere in the title
+    // e.g. "PS C:\Users\jagri" → extract "C:\Users\jagri"
+    let embedded = extract_embedded_path(title);
+
+    for candidate in candidates.into_iter().chain(embedded.as_deref()) {
+        if candidate.is_empty() {
+            continue;
+        }
+        let path = Path::new(candidate);
+        if path.is_absolute() && path.is_dir() {
+            tracing::info!("Extracted CWD: {:?}", path);
+            return Some(path.to_path_buf());
+        }
     }
+
+    tracing::debug!("No valid CWD found in title");
+    None
+}
+
+/// Try to find an embedded absolute path in a string.
+/// Handles cases like "PS C:\Users\foo" or "1 | vim - C:\Projects".
+fn extract_embedded_path(title: &str) -> Option<String> {
+    // Windows: look for X:\ pattern
+    if let Some(idx) = title.find(":\\") {
+        if idx > 0 {
+            let start = idx - 1;
+            let candidate = title[start..].trim_end_matches(&[' ', '>', ']', ')'][..]);
+            return Some(candidate.to_string());
+        }
+    }
+    // Unix: look for paths starting with /
+    if let Some(idx) = title.find('/') {
+        let candidate = title[idx..].split_whitespace().next()?;
+        return Some(candidate.to_string());
+    }
+    None
 }
 
 fn default_shell() -> (String, Vec<String>) {
