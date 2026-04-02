@@ -765,18 +765,15 @@ impl Cratty {
             // Unicode ╳ (U+2573 BOX DRAWINGS LIGHT DIAGONAL CROSS) stretches corner-to-corner
             row2.push(
                 button(
-                    container(
-                        text('\u{2573}')
-                            .size(20)
-                            .color(Color::from_rgb(0.85, 0.2, 0.2)),
-                    )
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill),
+                    text('\u{2573}')
+                        .size(16)
+                        .line_height(1.0)
+                        .color(Color::from_rgb(0.85, 0.2, 0.2)),
                 )
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
                 .height(24)
-                .padding(0)
+                .padding(3)
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
                         button::Status::Hovered => Color::from_rgb(0.2, 0.1, 0.1),
