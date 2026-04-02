@@ -1,7 +1,10 @@
 use iced::alignment;
-use iced::widget::{button, column, container, mouse_area, row, text, Space};
+use iced::keyboard;
+use iced::widget::{
+    button, column, container, mouse_area, row, stack, text, text_input, Space,
+};
 use iced::window;
-use iced::{Color, Element, Font, Length, Subscription, Task, Theme};
+use iced::{event, Color, Element, Font, Length, Subscription, Task, Theme};
 
 // Phosphor Bold icon font — embedded at compile time.
 const PHOSPHOR_BOLD_BYTES: &[u8] =
@@ -9,10 +12,11 @@ const PHOSPHOR_BOLD_BYTES: &[u8] =
 const PHOSPHOR: Font = Font::with_name("Phosphor-Bold");
 
 // Phosphor Bold codepoints.
-const ICO_MINUS: char = '\u{E32A}';   // minimize
-const ICO_SQUARE: char = '\u{E45E}';  // maximize
-const ICO_X: char = '\u{E4F6}';       // close window
-const ICO_PLUS: char = '\u{E3D4}';    // new tab
+const ICO_MINUS: char = '\u{E32A}';        // minimize
+const ICO_SQUARE: char = '\u{E45E}';       // maximize
+const ICO_X: char = '\u{E4F6}';            // close window
+const ICO_PLUS: char = '\u{E3D4}';         // new tab
+const ICO_DOTS_THREE_V: char = '\u{E208}'; // three dots vertical (kebab menu)
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt()
@@ -36,7 +40,14 @@ fn main() -> iced::Result {
 struct Tab {
     id: u64,
     title: String,
+    custom_title: Option<String>,
     term: iced_term::Terminal,
+}
+
+impl Tab {
+    fn display_title(&self) -> &str {
+        self.custom_title.as_deref().unwrap_or(&self.title)
+    }
 }
 
 struct Cratty {
@@ -44,6 +55,13 @@ struct Cratty {
     active_tab: usize,
     next_id: u64,
     last_size: Option<iced::Size>,
+    renaming: Option<RenameState>,
+    tab_menu_open: Option<usize>,
+}
+
+struct RenameState {
+    tab_idx: usize,
+    input: String,
 }
 
 #[derive(Debug, Clone)]
@@ -56,16 +74,25 @@ enum Message {
     Minimize,
     Maximize,
     CloseWindow,
+    ToggleTabMenu(usize),
+    CloseTabMenu,
+    StartRename(usize),
+    RenameInput(String),
+    ConfirmRename,
+    CancelRename,
+    KeyPressed(keyboard::Key, keyboard::Modifiers),
 }
 
 const BG_TITLEBAR: Color = Color::from_rgb(0.07, 0.07, 0.07);
-const BG_TERMINAL: Color = Color::from_rgb(0.094, 0.094, 0.094); // #181818 — matches iced_term default
-const BG_INACTIVE_TAB: Color = Color::from_rgb(0.07, 0.07, 0.07); // same as titlebar
+const BG_TERMINAL: Color = Color::from_rgb(0.094, 0.094, 0.094);
+const BG_INACTIVE_TAB: Color = Color::from_rgb(0.07, 0.07, 0.07);
 const FG_ACTIVE: Color = Color::WHITE;
 const FG_INACTIVE: Color = Color::from_rgb(0.55, 0.55, 0.55);
 const FG_DIM: Color = Color::from_rgb(0.4, 0.4, 0.4);
 const BORDER_ACTIVE: Color = Color::from_rgb(0.25, 0.25, 0.25);
 const TITLEBAR_H: f32 = 36.0;
+const BG_MENU: Color = Color::from_rgb(0.12, 0.12, 0.12);
+const BG_MENU_HOVER: Color = Color::from_rgb(0.18, 0.18, 0.18);
 
 /// Helper: get oldest window id then run an action on it.
 fn with_window<F, T>(f: F) -> Task<T>
@@ -83,10 +110,17 @@ impl Cratty {
                 let focus = iced_term::TerminalView::focus::<Message>(t.widget_id().clone());
                 (
                     Self {
-                        tabs: vec![Tab { id: 0, title: "Terminal".into(), term: t }],
+                        tabs: vec![Tab {
+                            id: 0,
+                            title: "Terminal".into(),
+                            custom_title: None,
+                            term: t,
+                        }],
                         active_tab: 0,
                         next_id: 1,
                         last_size: None,
+                        renaming: None,
+                        tab_menu_open: None,
                     },
                     focus,
                 )
@@ -94,7 +128,14 @@ impl Cratty {
             Err(e) => {
                 tracing::error!("Failed to create terminal: {e}");
                 (
-                    Self { tabs: vec![], active_tab: 0, next_id: 1, last_size: None },
+                    Self {
+                        tabs: vec![],
+                        active_tab: 0,
+                        next_id: 1,
+                        last_size: None,
+                        renaming: None,
+                        tab_menu_open: None,
+                    },
                     Task::none(),
                 )
             }
@@ -128,6 +169,7 @@ impl Cratty {
             }
 
             Message::NewTab => {
+                self.tab_menu_open = None;
                 let id = self.next_id;
                 self.next_id += 1;
                 match new_terminal(id) {
@@ -139,7 +181,12 @@ impl Cratty {
                         }
                         let focus =
                             iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
-                        self.tabs.push(Tab { id, title: "Terminal".into(), term });
+                        self.tabs.push(Tab {
+                            id,
+                            title: "Terminal".into(),
+                            custom_title: None,
+                            term,
+                        });
                         self.active_tab = self.tabs.len() - 1;
                         focus
                     }
@@ -148,6 +195,8 @@ impl Cratty {
             }
 
             Message::CloseTab(idx) => {
+                self.tab_menu_open = None;
+                self.renaming = None;
                 if idx < self.tabs.len() {
                     self.tabs.remove(idx);
                     if self.tabs.is_empty() {
@@ -159,7 +208,11 @@ impl Cratty {
             }
 
             Message::SwitchTab(idx) => {
+                if self.renaming.is_some() {
+                    return Task::none();
+                }
                 if idx < self.tabs.len() {
+                    self.tab_menu_open = None;
                     self.active_tab = idx;
                     iced_term::TerminalView::focus::<Message>(
                         self.tabs[idx].term.widget_id().clone(),
@@ -167,6 +220,86 @@ impl Cratty {
                 } else {
                     Task::none()
                 }
+            }
+
+            Message::ToggleTabMenu(idx) => {
+                if self.tab_menu_open == Some(idx) {
+                    self.tab_menu_open = None;
+                } else {
+                    self.tab_menu_open = Some(idx);
+                }
+                Task::none()
+            }
+
+            Message::CloseTabMenu => {
+                self.tab_menu_open = None;
+                Task::none()
+            }
+
+            Message::StartRename(idx) => {
+                self.tab_menu_open = None;
+                if idx < self.tabs.len() {
+                    let current = self.tabs[idx].custom_title.clone().unwrap_or_default();
+                    self.renaming = Some(RenameState {
+                        tab_idx: idx,
+                        input: current,
+                    });
+                    iced::widget::operation::focus_next()
+                } else {
+                    Task::none()
+                }
+            }
+
+            Message::RenameInput(val) => {
+                if let Some(state) = &mut self.renaming {
+                    state.input = val;
+                }
+                Task::none()
+            }
+
+            Message::ConfirmRename => {
+                if let Some(state) = self.renaming.take() {
+                    if state.tab_idx < self.tabs.len() {
+                        let trimmed = state.input.trim().to_string();
+                        self.tabs[state.tab_idx].custom_title = if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed)
+                        };
+                    }
+                }
+                if self.active_tab < self.tabs.len() {
+                    iced_term::TerminalView::focus::<Message>(
+                        self.tabs[self.active_tab].term.widget_id().clone(),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+
+            Message::CancelRename => {
+                self.renaming = None;
+                if self.active_tab < self.tabs.len() {
+                    iced_term::TerminalView::focus::<Message>(
+                        self.tabs[self.active_tab].term.widget_id().clone(),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+
+            Message::KeyPressed(key, _modifiers) => {
+                if self.renaming.is_some() {
+                    if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                        return self.update(Message::CancelRename);
+                    }
+                }
+                if self.tab_menu_open.is_some() {
+                    if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                        self.tab_menu_open = None;
+                    }
+                }
+                Task::none()
             }
 
             Message::DragWindow => with_window(window::drag),
@@ -196,24 +329,94 @@ impl Cratty {
                 .into()
         };
 
-        column![titlebar, terminal_view]
+        let main_content: Element<Message> = column![titlebar, terminal_view]
             .width(Length::Fill)
             .height(Length::Fill)
-            .into()
+            .into();
+
+        // If a tab menu is open, overlay it on top using stack
+        if let Some(menu_idx) = self.tab_menu_open {
+            let menu_offset_x = self.tab_menu_x_offset(menu_idx);
+
+            let menu_overlay: Element<Message> = container(self.view_tab_menu(menu_idx))
+                .padding(iced::Padding {
+                    top: TITLEBAR_H,
+                    left: menu_offset_x,
+                    right: 0.0,
+                    bottom: 0.0,
+                })
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into();
+
+            // Scrim: invisible clickable area behind the menu to close it
+            let scrim: Element<Message> = mouse_area(
+                container(Space::new())
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
+            .on_press(Message::CloseTabMenu)
+            .into();
+
+            stack![main_content, scrim, menu_overlay]
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        } else {
+            main_content
+        }
+    }
+
+    /// Estimate the x offset for the dropdown menu under tab `idx`.
+    fn tab_menu_x_offset(&self, idx: usize) -> f32 {
+        // Each tab is roughly 120px wide + 2px spacing, plus 8px left padding
+        let tab_width: f32 = 120.0;
+        let spacing: f32 = 2.0;
+        let left_pad: f32 = 8.0;
+        left_pad + (idx as f32) * (tab_width + spacing)
     }
 
     fn view_titlebar(&self) -> Element<'_, Message> {
-        // --- Tabs ---
         let mut tabs_items: Vec<Element<Message>> = self
             .tabs
             .iter()
             .enumerate()
             .map(|(idx, tab)| {
                 let active = idx == self.active_tab;
-                let label = if tab.title.len() > 20 {
-                    format!("{}...", &tab.title[..17])
+                let is_renaming = self.renaming.as_ref().is_some_and(|r| r.tab_idx == idx);
+
+                let tab_content: Element<Message> = if is_renaming {
+                    let input_val = self.renaming.as_ref().unwrap().input.clone();
+                    text_input("Tab name (empty to reset)", &input_val)
+                        .on_input(Message::RenameInput)
+                        .on_submit(Message::ConfirmRename)
+                        .size(11)
+                        .width(120)
+                        .padding([2, 4])
+                        .style(|_, _status| text_input::Style {
+                            background: iced::Background::Color(Color::from_rgb(0.1, 0.1, 0.1)),
+                            border: iced::Border {
+                                color: Color::from_rgb(0.3, 0.3, 0.3),
+                                width: 1.0,
+                                radius: 3.0.into(),
+                            },
+                            icon: FG_DIM,
+                            placeholder: FG_DIM,
+                            value: FG_ACTIVE,
+                            selection: Color::from_rgb(0.3, 0.3, 0.5),
+                        })
+                        .into()
                 } else {
-                    tab.title.clone()
+                    let display = tab.display_title();
+                    let label = if display.len() > 20 {
+                        format!("{}...", &display[..17])
+                    } else {
+                        display.to_string()
+                    };
+                    text(label)
+                        .size(11)
+                        .color(if active { FG_ACTIVE } else { FG_INACTIVE })
+                        .into()
                 };
 
                 let close = button(
@@ -244,16 +447,41 @@ impl Cratty {
                     ..Default::default()
                 });
 
-                let tab_row = row![
-                    text(label).size(11).color(if active { FG_ACTIVE } else { FG_INACTIVE }),
-                    close,
-                ]
-                .spacing(6)
-                .align_y(alignment::Vertical::Center);
+                let dots = button(
+                    container(
+                        text(ICO_DOTS_THREE_V)
+                            .size(14)
+                            .font(PHOSPHOR)
+                            .color(if active { FG_DIM } else { Color::from_rgb(0.25, 0.25, 0.25) }),
+                    )
+                    .center_x(18)
+                    .center_y(18),
+                )
+                .on_press(Message::ToggleTabMenu(idx))
+                .width(18)
+                .height(18)
+                .padding(0)
+                .style(|_, status| button::Style {
+                    background: match status {
+                        button::Status::Hovered => Some(iced::Background::Color(
+                            Color::from_rgb(0.3, 0.3, 0.3),
+                        )),
+                        _ => None,
+                    },
+                    border: iced::Border {
+                        radius: 3.0.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                });
+
+                let tab_row = row![tab_content, dots, close]
+                    .spacing(4)
+                    .align_y(alignment::Vertical::Center);
 
                 button(tab_row)
                     .on_press(Message::SwitchTab(idx))
-                    .padding([5, 12])
+                    .padding([5, 10])
                     .style(move |_, _| {
                         if active {
                             button::Style {
@@ -310,7 +538,6 @@ impl Cratty {
             .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 0.0, left: 8.0 })
             .align_y(alignment::Vertical::Bottom);
 
-        // --- Window controls: [minimize] [maximize] [close] ---
         let controls = row![
             win_btn(ICO_MINUS, Message::Minimize, FG_DIM, Color::from_rgb(0.2, 0.2, 0.2)),
             win_btn(ICO_SQUARE, Message::Maximize, FG_DIM, Color::from_rgb(0.2, 0.2, 0.2)),
@@ -318,7 +545,6 @@ impl Cratty {
         ]
         .spacing(0);
 
-        // --- Full bar: draggable area with tabs on left, controls on right ---
         let bar_inner = row![
             tabs,
             Space::new().width(Length::Fill),
@@ -327,7 +553,6 @@ impl Cratty {
         .align_y(alignment::Vertical::Center)
         .height(TITLEBAR_H);
 
-        // Wrap in mouse_area for drag
         mouse_area(
             container(bar_inner)
                 .width(Length::Fill)
@@ -340,16 +565,69 @@ impl Cratty {
         .into()
     }
 
+    fn view_tab_menu(&self, idx: usize) -> Element<'_, Message> {
+        let rename_btn = button(text("Rename").size(12).color(FG_ACTIVE))
+            .on_press(Message::StartRename(idx))
+            .padding([6, 16])
+            .width(Length::Fill)
+            .style(|_, status| button::Style {
+                background: Some(iced::Background::Color(match status {
+                    button::Status::Hovered => BG_MENU_HOVER,
+                    _ => BG_MENU,
+                })),
+                ..Default::default()
+            });
+
+        let close_btn = button(text("Close").size(12).color(FG_ACTIVE))
+            .on_press(Message::CloseTab(idx))
+            .padding([6, 16])
+            .width(Length::Fill)
+            .style(|_, status| button::Style {
+                background: Some(iced::Background::Color(match status {
+                    button::Status::Hovered => BG_MENU_HOVER,
+                    _ => BG_MENU,
+                })),
+                ..Default::default()
+            });
+
+        container(
+            column![rename_btn, close_btn].width(120),
+        )
+        .style(|_| container::Style {
+            background: Some(iced::Background::Color(BG_MENU)),
+            border: iced::Border {
+                color: Color::from_rgb(0.2, 0.2, 0.2),
+                width: 1.0,
+                radius: 4.0.into(),
+            },
+            ..Default::default()
+        })
+        .into()
+    }
+
     fn theme(&self) -> Theme {
         Theme::Dark
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        Subscription::batch(
-            self.tabs
-                .iter()
-                .map(|tab| tab.term.subscription().map(Message::TermEvent)),
-        )
+        let term_subs = self
+            .tabs
+            .iter()
+            .map(|tab| tab.term.subscription().map(Message::TermEvent));
+
+        let key_sub = event::listen_with(|evt, status, _window| {
+            if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                key, modifiers, ..
+            }) = evt
+            {
+                if status == event::Status::Captured || status == event::Status::Ignored {
+                    return Some(Message::KeyPressed(key, modifiers));
+                }
+            }
+            None
+        });
+
+        Subscription::batch(term_subs.chain(std::iter::once(key_sub)))
     }
 }
 
