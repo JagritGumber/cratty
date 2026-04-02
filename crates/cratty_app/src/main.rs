@@ -767,12 +767,14 @@ impl Cratty {
                 button(
                     container(
                         text(ICO_X)
-                            .size(14)
+                            .size(12)
                             .font(PHOSPHOR)
                             .color(Color::from_rgb(0.85, 0.2, 0.2)),
                     )
-                    .center_x(24)
-                    .center_y(24),
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill),
                 )
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
