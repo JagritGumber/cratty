@@ -128,7 +128,7 @@ enum Message {
     RenameInput(String),
     ConfirmRename,
     SetTabColor(u64, Option<Color>),
-    ToggleColorSubmenu,
+    OpenColorSubmenu,
     EscapePressed,
 }
 
@@ -451,8 +451,8 @@ impl Cratty {
                 Task::none()
             }
 
-            Message::ToggleColorSubmenu => {
-                self.color_submenu_open = !self.color_submenu_open;
+            Message::OpenColorSubmenu => {
+                self.color_submenu_open = true;
                 Task::none()
             }
 
@@ -526,14 +526,14 @@ impl Cratty {
                     menu_overlay,
                 ];
 
-                // Color submenu: separate panel to the right of the main menu
+                // Color submenu: nested panel flush to the right of the main menu
                 if self.color_submenu_open {
+                    // Main menu is 140px wide. Color row is 3rd item (~84px from top).
                     let color_panel: Element<Message> =
                         container(self.view_color_panel(menu_idx))
                             .padding(iced::Padding {
-                                // Align with the "Color" row (~3rd item, roughly 3*28px from top)
-                                top: TITLEBAR_H + 56.0,
-                                left: menu_x + 184.0, // main menu width (180) + gap (4)
+                                top: TITLEBAR_H + 60.0,
+                                left: menu_x + 140.0,
                                 right: 0.0,
                                 bottom: 0.0,
                             })
@@ -680,27 +680,27 @@ impl Cratty {
             Space::new().width(Length::Fill),
             text("›").size(14).color(FG_DIM),
         ]
-        .width(Length::Fill);
+        .width(Length::Fill)
+        .padding([6, 16]);
 
         let color_bg = if self.color_submenu_open { BG_MENU_HOVER } else { BG_MENU };
-        let color_btn = button(color_label)
-            .on_press(Message::ToggleColorSubmenu)
-            .padding([6, 16])
-            .width(Length::Fill)
-            .style(move |_, status| button::Style {
-                background: Some(iced::Background::Color(match status {
-                    button::Status::Hovered => BG_MENU_HOVER,
-                    _ => color_bg,
-                })),
-                ..Default::default()
-            });
+        let color_item: Element<Message> = mouse_area(
+            container(color_label)
+                .width(Length::Fill)
+                .style(move |_| container::Style {
+                    background: Some(iced::Background::Color(color_bg)),
+                    ..Default::default()
+                }),
+        )
+        .on_enter(Message::OpenColorSubmenu)
+        .into();
 
         container(
             column![
                 menu_item("Rename", Message::StartRename(idx)),
                 menu_item("Duplicate", Message::DuplicateTab(idx)),
                 separator(),
-                color_btn,
+                color_item,
                 separator(),
                 menu_item("Close", Message::CloseTab(idx)),
             ]
@@ -722,24 +722,23 @@ impl Cratty {
         let tab_id = self.tabs[idx].id;
         let current_color = self.tabs[idx].color;
 
-        // 2 rows of 4 swatches
         let make_swatch = |color: Color, is_selected: bool, tid: u64| -> Element<'_, Message> {
-            button(Space::new().width(20).height(20))
+            button(Space::new().width(18).height(18))
                 .on_press(Message::SetTabColor(tid, Some(color)))
-                .width(26)
-                .height(26)
+                .width(24)
+                .height(24)
                 .padding(3)
                 .style(move |_, status| {
                     let border = if is_selected {
-                        iced::Border { color: FG_ACTIVE, width: 2.0, radius: 5.0.into() }
+                        iced::Border { color: FG_ACTIVE, width: 2.0, radius: 4.0.into() }
                     } else {
                         match status {
                             button::Status::Hovered => iced::Border {
                                 color: FG_DIM,
                                 width: 1.0,
-                                radius: 5.0.into(),
+                                radius: 4.0.into(),
                             },
-                            _ => iced::Border { radius: 5.0.into(), ..Default::default() },
+                            _ => iced::Border { radius: 4.0.into(), ..Default::default() },
                         }
                     };
                     button::Style {
@@ -762,25 +761,15 @@ impl Cratty {
             .collect();
 
         let mut items: Vec<Element<Message>> = vec![
-            row(row1).spacing(4).into(),
-            row(row2).spacing(4).into(),
+            row(row1).spacing(3).into(),
+            row(row2).spacing(3).into(),
         ];
 
         if current_color.is_some() {
-            items.push(
-                container(Space::new())
-                    .width(Length::Fill)
-                    .height(1)
-                    .style(|_| container::Style {
-                        background: Some(iced::Background::Color(FG_MUTED)),
-                        ..Default::default()
-                    })
-                    .into(),
-            );
             items.push(menu_item("Clear", Message::SetTabColor(tab_id, None)));
         }
 
-        container(column(items).spacing(4).padding(8))
+        container(column(items).spacing(3).padding(6))
             .style(|_| container::Style {
                 background: Some(iced::Background::Color(BG_MENU)),
                 border: iced::Border {
