@@ -760,13 +760,18 @@ impl Cratty {
             .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
             .collect();
 
-        // Add a "clear" swatch (dark with red ✕) as the 9th item in row 2
+        // Add a "clear" swatch — diagonal cross like Photoshop's "no color"
         if current_color.is_some() {
+            // Unicode ╳ (U+2573 BOX DRAWINGS LIGHT DIAGONAL CROSS) stretches corner-to-corner
             row2.push(
                 button(
-                    container(text(ICO_X).size(10).font(PHOSPHOR).color(Color::from_rgb(0.8, 0.25, 0.25)))
-                        .center_x(18)
-                        .center_y(18),
+                    container(
+                        text('\u{2573}')
+                            .size(20)
+                            .color(Color::from_rgb(0.85, 0.2, 0.2)),
+                    )
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill),
                 )
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
@@ -774,11 +779,11 @@ impl Cratty {
                 .padding(0)
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
-                        button::Status::Hovered => Color::from_rgb(0.2, 0.2, 0.2),
+                        button::Status::Hovered => Color::from_rgb(0.2, 0.1, 0.1),
                         _ => Color::from_rgb(0.12, 0.12, 0.12),
                     })),
                     border: iced::Border {
-                        color: Color::from_rgb(0.8, 0.25, 0.25),
+                        color: Color::from_rgb(0.3, 0.15, 0.15),
                         width: 1.0,
                         radius: 4.0.into(),
                     },
