@@ -64,7 +64,7 @@ impl Tab {
 }
 
 struct RenameState {
-    tab_idx: usize,
+    tab_id: u64,
     input: String,
 }
 
@@ -340,14 +340,15 @@ impl Cratty {
 
             Message::StartRename(idx) => {
                 self.dismiss_menu();
-                if idx >= self.tabs.len() {
-                    return Task::none();
+                if let Some(tab) = self.tabs.get(idx) {
+                    self.renaming = Some(RenameState {
+                        tab_id: tab.id,
+                        input: tab.custom_title.clone().unwrap_or_default(),
+                    });
+                    iced::widget::operation::focus_next()
+                } else {
+                    Task::none()
                 }
-                self.renaming = Some(RenameState {
-                    tab_idx: idx,
-                    input: self.tabs[idx].custom_title.clone().unwrap_or_default(),
-                });
-                iced::widget::operation::focus_next()
             }
 
             Message::RenameInput(val) => {
@@ -359,7 +360,7 @@ impl Cratty {
 
             Message::ConfirmRename => {
                 if let Some(state) = self.renaming.take() {
-                    if let Some(tab) = self.tabs.get_mut(state.tab_idx) {
+                    if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == state.tab_id) {
                         let trimmed = state.input.trim();
                         tab.custom_title = if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
                     }
@@ -507,7 +508,7 @@ impl Cratty {
 
     fn view_tab(&self, idx: usize, tab: &Tab) -> Element<'_, Message> {
         let active = idx == self.active_tab;
-        let is_renaming = self.renaming.as_ref().is_some_and(|r| r.tab_idx == idx);
+        let is_renaming = self.renaming.as_ref().is_some_and(|r| r.tab_id == tab.id);
         let icon_fg = if active { FG_DIM } else { FG_MUTED };
 
         let tab_content: Element<Message> = if is_renaming {
@@ -522,8 +523,8 @@ impl Cratty {
                 .into()
         } else {
             let display = tab.display_title();
-            let label = if display.len() > 20 {
-                format!("{}...", &display[..17])
+            let label: String = if display.chars().count() > 20 {
+                format!("{}...", display.chars().take(17).collect::<String>())
             } else {
                 display.to_string()
             };
