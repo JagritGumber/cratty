@@ -29,6 +29,14 @@ const BG_MENU_HOVER: Color = Color::from_rgb(0.18, 0.18, 0.18);
 const BG_HOVER_SUBTLE: Color = Color::from_rgb(0.3, 0.3, 0.3);
 const TITLEBAR_H: f32 = 36.0;
 
+// Tab geometry constants for menu positioning.
+const TAB_PAD_H: f32 = 10.0;     // horizontal padding inside tab button ([5, 10])
+const TAB_ICON_W: f32 = 18.0;    // width of each icon button (dots, close)
+const TAB_ICON_GAP: f32 = 4.0;   // spacing between elements in tab row
+const TAB_ROW_LEFT: f32 = 8.0;   // left padding of the tabs row
+const TAB_ROW_SPACING: f32 = 2.0; // spacing between tab buttons
+const TAB_CHAR_W: f32 = 6.5;     // approximate width per character at size 11
+
 fn main() -> iced::Result {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -61,6 +69,14 @@ impl Tab {
     fn display_title(&self) -> &str {
         self.custom_title.as_deref().unwrap_or(&self.title)
     }
+
+    /// Estimate the rendered width of this tab button.
+    fn estimated_width(&self) -> f32 {
+        let char_count = self.display_title().chars().count().min(20) as f32;
+        let text_w = char_count * TAB_CHAR_W;
+        // text + gap + dots icon + gap + close icon + horizontal padding both sides
+        text_w + TAB_ICON_GAP + TAB_ICON_W + TAB_ICON_GAP + TAB_ICON_W + TAB_PAD_H * 2.0
+    }
 }
 
 struct RenameState {
@@ -74,7 +90,7 @@ struct Cratty {
     next_id: u64,
     last_size: Option<iced::Size>,
     renaming: Option<RenameState>,
-    tab_menu_open: Option<usize>,
+    tab_menu_open: Option<u64>, // tab ID, not index
 }
 
 #[derive(Debug, Clone)]
@@ -88,13 +104,12 @@ enum Message {
     Minimize,
     Maximize,
     CloseWindow,
-    ToggleTabMenu(usize),
+    ToggleTabMenu(u64),
     CloseTabMenu,
     StartRename(usize),
     RenameInput(String),
     ConfirmRename,
-    CancelRename,
-    KeyPressed(keyboard::Key),
+    EscapePressed,
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -108,7 +123,7 @@ where
     window::oldest().and_then(move |id| f(id))
 }
 
-/// Small icon button used in tabs (close ✕, kebab ⋮).
+/// Small icon button used in tabs (close, kebab).
 fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
     button(
         container(text(icon).size(size).font(PHOSPHOR).color(fg))
@@ -116,8 +131,8 @@ fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, 
             .center_y(18),
     )
     .on_press(msg)
-    .width(18)
-    .height(18)
+    .width(TAB_ICON_W)
+    .height(TAB_ICON_W)
     .padding(0)
     .style(|_, status| button::Style {
         background: match status {
@@ -169,16 +184,16 @@ fn menu_item(label: &str, msg: Message) -> Element<'_, Message> {
 
 /// Tab button style.
 fn tab_style(active: bool) -> button::Style {
-    let (bg, fg, border_color) = if active {
-        (BG_TERMINAL, FG_ACTIVE, Color::TRANSPARENT)
+    let (bg, fg) = if active {
+        (BG_TERMINAL, FG_ACTIVE)
     } else {
-        (BG_TITLEBAR, FG_INACTIVE, Color::TRANSPARENT)
+        (BG_TITLEBAR, FG_INACTIVE)
     };
     button::Style {
         background: Some(iced::Background::Color(bg)),
         text_color: fg,
         border: iced::Border {
-            color: border_color,
+            color: Color::TRANSPARENT,
             width: 0.0,
             radius: iced::border::Radius::new(4.0).bottom(0.0),
         },
@@ -265,7 +280,7 @@ impl Cratty {
         }
     }
 
-    /// Close a tab by index, exit if none left.
+    /// Close a tab by index. Clears menu/rename state, refocuses terminal.
     fn close_tab(&mut self, idx: usize) -> Task<Message> {
         if idx >= self.tabs.len() {
             return Task::none();
@@ -273,20 +288,23 @@ impl Cratty {
         let removed_id = self.tabs[idx].id;
         self.tabs.remove(idx);
         self.tab_menu_open = None;
-        if let Some(ref r) = self.renaming {
-            if r.tab_id == removed_id {
-                self.renaming = None;
-            }
+        if self.renaming.as_ref().is_some_and(|r| r.tab_id == removed_id) {
+            self.renaming = None;
         }
         if self.tabs.is_empty() {
             return with_window(window::close);
         }
         self.active_tab = self.active_tab.min(self.tabs.len() - 1);
-        Task::none()
+        self.focus_active_terminal()
     }
 
     fn dismiss_menu(&mut self) {
         self.tab_menu_open = None;
+    }
+
+    /// Whether any UI overlay (menu, rename) is active — used to gate keyboard subscription.
+    fn has_overlay(&self) -> bool {
+        self.renaming.is_some() || self.tab_menu_open.is_some()
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -295,17 +313,27 @@ impl Cratty {
                 if let iced_term::BackendCommand::Resize(Some(layout), Some(_)) = &cmd {
                     self.last_size = Some(*layout);
                 }
-                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == term_id) {
-                    match tab.term.handle(iced_term::Command::ProxyToBackend(cmd)) {
-                        iced_term::actions::Action::Shutdown => {
-                            let idx = self.tabs.iter().position(|t| t.id == term_id).unwrap();
+                // Handle the backend command and capture the resulting action.
+                // Separate the borrow of `tab` from the post-action dispatch to
+                // avoid holding a mutable borrow across `self.close_tab()`.
+                let action = self
+                    .tabs
+                    .iter_mut()
+                    .find(|t| t.id == term_id)
+                    .map(|tab| tab.term.handle(iced_term::Command::ProxyToBackend(cmd)));
+
+                match action {
+                    Some(iced_term::actions::Action::Shutdown) => {
+                        if let Some(idx) = self.tabs.iter().position(|t| t.id == term_id) {
                             return self.close_tab(idx);
                         }
-                        iced_term::actions::Action::ChangeTitle(title) => {
+                    }
+                    Some(iced_term::actions::Action::ChangeTitle(title)) => {
+                        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == term_id) {
                             tab.title = title;
                         }
-                        iced_term::actions::Action::Ignore => {}
                     }
+                    Some(iced_term::actions::Action::Ignore) | None => {}
                 }
                 Task::none()
             }
@@ -331,8 +359,9 @@ impl Cratty {
                 self.focus_active_terminal()
             }
 
-            Message::ToggleTabMenu(idx) => {
-                self.tab_menu_open = if self.tab_menu_open == Some(idx) { None } else { Some(idx) };
+            Message::ToggleTabMenu(tab_id) => {
+                self.tab_menu_open =
+                    if self.tab_menu_open == Some(tab_id) { None } else { Some(tab_id) };
                 Task::none()
             }
 
@@ -365,24 +394,19 @@ impl Cratty {
                 if let Some(state) = self.renaming.take() {
                     if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == state.tab_id) {
                         let trimmed = state.input.trim();
-                        tab.custom_title = if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
+                        tab.custom_title =
+                            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
                     }
                 }
                 self.focus_active_terminal()
             }
 
-            Message::CancelRename => {
-                self.renaming = None;
-                self.focus_active_terminal()
-            }
-
-            Message::KeyPressed(key) => {
-                if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
-                    if self.renaming.is_some() {
-                        return self.update(Message::CancelRename);
-                    }
-                    self.dismiss_menu();
+            Message::EscapePressed => {
+                if self.renaming.is_some() {
+                    self.renaming = None;
+                    return self.focus_active_terminal();
                 }
+                self.dismiss_menu();
                 Task::none()
             }
 
@@ -420,38 +444,44 @@ impl Cratty {
             .height(Length::Fill)
             .into();
 
-        if let Some(menu_idx) = self.tab_menu_open {
-            let menu_overlay: Element<Message> = container(self.view_tab_menu(menu_idx))
-                .padding(iced::Padding {
-                    top: TITLEBAR_H,
-                    left: self.tab_menu_x_offset(menu_idx),
-                    right: 0.0,
-                    bottom: 0.0,
-                })
-                .width(Length::Fill)
-                .height(Length::Fill)
+        if let Some(menu_tab_id) = self.tab_menu_open {
+            if let Some(menu_idx) = self.tabs.iter().position(|t| t.id == menu_tab_id) {
+                let menu_overlay: Element<Message> = container(self.view_tab_menu(menu_idx))
+                    .padding(iced::Padding {
+                        top: TITLEBAR_H,
+                        left: self.tab_menu_x_offset(menu_idx),
+                        right: 0.0,
+                        bottom: 0.0,
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into();
+
+                let scrim: Element<Message> = mouse_area(
+                    container(Space::new()).width(Length::Fill).height(Length::Fill),
+                )
+                .on_press(Message::CloseTabMenu)
                 .into();
 
-            let scrim: Element<Message> = mouse_area(
-                container(Space::new()).width(Length::Fill).height(Length::Fill),
-            )
-            .on_press(Message::CloseTabMenu)
-            .into();
-
-            stack![main_content, scrim, menu_overlay]
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into()
-        } else {
-            main_content
+                return stack![main_content, scrim, menu_overlay]
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into();
+            }
         }
+        main_content
     }
 
+    /// Compute the x offset for the dropdown menu under tab at `idx`.
     fn tab_menu_x_offset(&self, idx: usize) -> f32 {
-        let tab_width: f32 = 120.0;
-        let spacing: f32 = 2.0;
-        let left_pad: f32 = 8.0;
-        left_pad + (idx as f32) * (tab_width + spacing)
+        let mut x = TAB_ROW_LEFT;
+        for (i, tab) in self.tabs.iter().enumerate() {
+            if i == idx {
+                break;
+            }
+            x += tab.estimated_width() + TAB_ROW_SPACING;
+        }
+        x
     }
 
     fn view_titlebar(&self) -> Element<'_, Message> {
@@ -482,8 +512,8 @@ impl Cratty {
         );
 
         let tabs = row(tabs_items)
-            .spacing(2)
-            .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 0.0, left: 8.0 })
+            .spacing(TAB_ROW_SPACING)
+            .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 0.0, left: TAB_ROW_LEFT })
             .align_y(alignment::Vertical::Bottom);
 
         let controls = row![
@@ -539,15 +569,15 @@ impl Cratty {
 
         let tab_row = row![
             tab_content,
-            icon_btn(ICO_DOTS_THREE_V, 14.0, icon_fg, Message::ToggleTabMenu(idx)),
+            icon_btn(ICO_DOTS_THREE_V, 14.0, icon_fg, Message::ToggleTabMenu(tab.id)),
             icon_btn(ICO_X, 10.0, icon_fg, Message::CloseTab(idx)),
         ]
-        .spacing(4)
+        .spacing(TAB_ICON_GAP)
         .align_y(alignment::Vertical::Center);
 
         button(tab_row)
             .on_press(Message::SwitchTab(idx))
-            .padding([5, 10])
+            .padding([5, TAB_PAD_H as u16])
             .style(move |_, _| tab_style(active))
             .into()
     }
@@ -583,15 +613,21 @@ impl Cratty {
             .iter()
             .map(|tab| tab.term.subscription().map(Message::TermEvent));
 
-        let key_sub = event::listen_with(|evt, _status, _window| {
-            if let iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) = evt {
-                Some(Message::KeyPressed(key))
-            } else {
+        // Only intercept Escape when an overlay is active, so terminal apps
+        // (vim, htop, etc.) receive Escape normally at all other times.
+        if self.has_overlay() {
+            let esc_sub = event::listen_with(|evt, _status, _window| {
+                if let iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) = evt {
+                    if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                        return Some(Message::EscapePressed);
+                    }
+                }
                 None
-            }
-        });
-
-        Subscription::batch(term_subs.chain(std::iter::once(key_sub)))
+            });
+            Subscription::batch(term_subs.chain(std::iter::once(esc_sub)))
+        } else {
+            Subscription::batch(term_subs)
+        }
     }
 }
 
