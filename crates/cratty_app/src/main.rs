@@ -143,12 +143,15 @@ where
     window::oldest().and_then(move |id| f(id))
 }
 
-/// Phosphor Bold icon text with proper glyph shaping.
+/// Phosphor Bold icon text — fill + center for proper alignment in fixed-size buttons.
 fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'static> {
     text(codepoint)
         .font(PHOSPHOR)
         .size(size)
         .color(fg)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center()
         .shaping(text::Shaping::Advanced)
 }
 
@@ -156,7 +159,9 @@ fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'s
 fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
     button(phosphor_icon(icon, size, fg))
         .on_press(msg)
-        .padding([2, 3])
+        .width(TAB_ICON_W)
+        .height(TAB_ICON_W)
+        .padding(0)
         .style(|_, status| button::Style {
             background: match status {
                 button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
@@ -170,15 +175,11 @@ fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, 
 
 /// Window chrome button (minimize / maximize / close).
 fn win_btn(icon: char, msg: Message, fg: Color, hover_bg: Color) -> Element<'static, Message> {
-    button(
-        container(phosphor_icon(icon, 14.0, fg))
-            .center_x(Length::Fill)
-            .center_y(Length::Fill),
-    )
-    .on_press(msg)
-    .width(46)
-    .height(TITLEBAR_H)
-    .padding(0)
+    button(phosphor_icon(icon, 14.0, fg))
+        .on_press(msg)
+        .width(46)
+        .height(TITLEBAR_H)
+        .padding(0)
     .style(move |_, status| button::Style {
         background: match status {
             button::Status::Hovered => Some(iced::Background::Color(hover_bg)),
@@ -578,9 +579,7 @@ impl Cratty {
 
         tabs_items.push(
             button(
-                container(phosphor_icon(ICO_PLUS, 14.0, FG_DIM))
-                    .center_x(Length::Shrink)
-                    .center_y(Length::Shrink),
+                phosphor_icon(ICO_PLUS, 14.0, FG_DIM),
             )
             .on_press(Message::NewTab)
             .padding([4, 8])
@@ -771,7 +770,7 @@ impl Cratty {
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
                 .height(24)
-                .padding(4)
+                .padding(0)
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
                         button::Status::Hovered => Color::from_rgb(0.2, 0.1, 0.1),
