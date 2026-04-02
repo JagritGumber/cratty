@@ -108,6 +108,23 @@ Active tabs have `Radius::new(4.0).bottom(0.0)` (top rounded, bottom flat) and t
 | GUI framework    | Chromium       | iced 0.14         |
 | Architecture     | Component-based| Elm (functional)  |
 
+## Known Limitations
+
+### iced_term doesn't expose child PID
+The PTY child process PID is created internally in `Backend::new` and never surfaced. This blocks:
+- **Duplicate foreground process**: Can't detect what's running (e.g., vim, Claude Code) to re-launch it in the duplicated tab. Currently we only inherit the CWD by parsing the shell-reported title.
+- **Process-aware tab titles**: Can't show the foreground command name (like Tabby/iTerm2 do).
+- **Graceful close**: Can't send SIGHUP/SIGTERM to the child before closing.
+
+Workarounds considered:
+1. Fork iced_term to expose `tty::Pty` or at least the child PID
+2. On Windows: enumerate child processes of our own PID via `CreateToolhelp32Snapshot`, match by creation time against tab creation order — fragile
+3. On Linux: walk `/proc/<our_pid>/task/*/children` — simpler but platform-specific
+4. Build our own PTY layer (planned for Zig rewrite) with full process tree access
+
+### No OSC 7 (CWD reporting) support
+Modern shells can emit OSC 7 to report the current working directory. alacritty_terminal parses it but iced_term doesn't surface it as an event. This means CWD detection relies on title parsing, which is fragile across shell configurations.
+
 ## Future Plans
 
 1. Wire cratty_core config into the app
