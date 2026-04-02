@@ -770,7 +770,8 @@ impl Cratty {
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
                 .height(24)
-                .padding(0)
+                // Nudge: Phosphor X glyph has uneven bearings — compensate
+                .padding(iced::Padding { top: 1.0, right: 0.0, bottom: 0.0, left: 1.0 })
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
                         button::Status::Hovered => Color::from_rgb(0.2, 0.1, 0.1),
