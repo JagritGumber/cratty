@@ -143,10 +143,19 @@ where
     window::oldest().and_then(move |id| f(id))
 }
 
+/// Phosphor Bold icon text with proper glyph shaping.
+fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'static> {
+    text(codepoint)
+        .font(PHOSPHOR)
+        .size(size)
+        .color(fg)
+        .shaping(text::Shaping::Advanced)
+}
+
 /// Small icon button used in tabs (close, kebab).
 fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
     button(
-        container(text(icon).size(size).font(PHOSPHOR).color(fg))
+        container(phosphor_icon(icon, size, fg))
             .center_x(18)
             .center_y(18),
     )
@@ -168,7 +177,7 @@ fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, 
 /// Window chrome button (minimize / maximize / close).
 fn win_btn(icon: char, msg: Message, fg: Color, hover_bg: Color) -> Element<'static, Message> {
     button(
-        container(text(icon).size(14).font(PHOSPHOR).color(fg))
+        container(phosphor_icon(icon, 14.0, fg))
             .center_x(Length::Fill)
             .center_y(Length::Fill),
     )
@@ -575,7 +584,7 @@ impl Cratty {
 
         tabs_items.push(
             button(
-                container(text(ICO_PLUS).size(14).font(PHOSPHOR).color(FG_DIM))
+                container(phosphor_icon(ICO_PLUS, 14.0, FG_DIM))
                     .center_x(Length::Shrink)
                     .center_y(Length::Shrink),
             )
@@ -765,16 +774,9 @@ impl Cratty {
             // Unicode ╳ (U+2573 BOX DRAWINGS LIGHT DIAGONAL CROSS) stretches corner-to-corner
             row2.push(
                 button(
-                    container(
-                        text(ICO_X)
-                            .size(12)
-                            .font(PHOSPHOR)
-                            .color(Color::from_rgb(0.85, 0.2, 0.2)),
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill),
+                    container(phosphor_icon(ICO_X, 12.0, Color::from_rgb(0.85, 0.2, 0.2)))
+                        .center_x(24)
+                        .center_y(24),
                 )
                 .on_press(Message::SetTabColor(tab_id, None))
                 .width(24)
