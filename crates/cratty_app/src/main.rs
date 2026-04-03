@@ -63,8 +63,21 @@ struct Tab {
     id: u64,
     title: String,
     custom_title: Option<String>,
+    color: Option<Color>,
     term: iced_term::Terminal,
 }
+
+// Preset tab colors.
+const TAB_COLORS: &[(Color, &str)] = &[
+    (Color::from_rgb(0.90, 0.30, 0.30), "Red"),
+    (Color::from_rgb(0.95, 0.55, 0.25), "Orange"),
+    (Color::from_rgb(0.90, 0.80, 0.25), "Yellow"),
+    (Color::from_rgb(0.35, 0.75, 0.40), "Green"),
+    (Color::from_rgb(0.30, 0.65, 0.90), "Blue"),
+    (Color::from_rgb(0.55, 0.40, 0.85), "Purple"),
+    (Color::from_rgb(0.85, 0.40, 0.70), "Pink"),
+    (Color::from_rgb(0.45, 0.75, 0.75), "Teal"),
+];
 
 impl Tab {
     fn display_title(&self) -> &str {
@@ -95,6 +108,7 @@ struct Cratty {
     last_size: Option<iced::Size>,
     renaming: Option<RenameState>,
     tab_menu_open: Option<u64>, // tab ID, not index
+    color_submenu_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +127,8 @@ enum Message {
     StartRename(usize),
     RenameInput(String),
     ConfirmRename,
+    SetTabColor(u64, Option<Color>),
+    OpenColorSubmenu,
     EscapePressed,
 }
 
@@ -127,39 +143,43 @@ where
     window::oldest().and_then(move |id| f(id))
 }
 
+/// Phosphor Bold icon text — fill + center for proper alignment in fixed-size buttons.
+fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'static> {
+    text(codepoint)
+        .font(PHOSPHOR)
+        .size(size)
+        .color(fg)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center()
+        .shaping(text::Shaping::Advanced)
+}
+
 /// Small icon button used in tabs (close, kebab).
 fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
-    button(
-        container(text(icon).size(size).font(PHOSPHOR).color(fg))
-            .center_x(18)
-            .center_y(18),
-    )
-    .on_press(msg)
-    .width(TAB_ICON_W)
-    .height(TAB_ICON_W)
-    .padding(0)
-    .style(|_, status| button::Style {
-        background: match status {
-            button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
-            _ => None,
-        },
-        border: iced::Border { radius: 3.0.into(), ..Default::default() },
-        ..Default::default()
-    })
-    .into()
+    button(phosphor_icon(icon, size, fg))
+        .on_press(msg)
+        .width(TAB_ICON_W)
+        .height(TAB_ICON_W)
+        .padding(0)
+        .style(|_, status| button::Style {
+            background: match status {
+                button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
+                _ => None,
+            },
+            border: iced::Border { radius: 3.0.into(), ..Default::default() },
+            ..Default::default()
+        })
+        .into()
 }
 
 /// Window chrome button (minimize / maximize / close).
 fn win_btn(icon: char, msg: Message, fg: Color, hover_bg: Color) -> Element<'static, Message> {
-    button(
-        container(text(icon).size(14).font(PHOSPHOR).color(fg))
-            .center_x(Length::Fill)
-            .center_y(Length::Fill),
-    )
-    .on_press(msg)
-    .width(46)
-    .height(TITLEBAR_H)
-    .padding(0)
+    button(phosphor_icon(icon, 14.0, fg))
+        .on_press(msg)
+        .width(46)
+        .height(TITLEBAR_H)
+        .padding(0)
     .style(move |_, status| button::Style {
         background: match status {
             button::Status::Hovered => Some(iced::Background::Color(hover_bg)),
@@ -186,19 +206,37 @@ fn menu_item(label: &str, msg: Message) -> Element<'_, Message> {
         .into()
 }
 
-/// Tab button style.
-fn tab_style(active: bool) -> button::Style {
+/// Tab button style with optional color accent.
+fn tab_style(active: bool, tab_color: Option<Color>) -> button::Style {
     let (bg, fg) = if active {
-        (BG_TERMINAL, FG_ACTIVE)
+        match tab_color {
+            // Tint the active tab background with the color (subtle blend)
+            Some(c) => {
+                let bg = Color::from_rgb(
+                    BG_TERMINAL.r * 0.7 + c.r * 0.3,
+                    BG_TERMINAL.g * 0.7 + c.g * 0.3,
+                    BG_TERMINAL.b * 0.7 + c.b * 0.3,
+                );
+                (bg, FG_ACTIVE)
+            }
+            None => (BG_TERMINAL, FG_ACTIVE),
+        }
     } else {
         (BG_TITLEBAR, FG_INACTIVE)
     };
+
+    // Colored tabs get a 2px bottom accent line
+    let (border_color, border_width) = match tab_color {
+        Some(c) => (c, 2.0),
+        None => (Color::TRANSPARENT, 0.0),
+    };
+
     button::Style {
         background: Some(iced::Background::Color(bg)),
         text_color: fg,
         border: iced::Border {
-            color: Color::TRANSPARENT,
-            width: 0.0,
+            color: border_color,
+            width: border_width,
             radius: iced::border::Radius::new(4.0).bottom(0.0),
         },
         ..Default::default()
@@ -229,12 +267,13 @@ impl Cratty {
             Ok(t) => {
                 let focus = iced_term::TerminalView::focus::<Message>(t.widget_id().clone());
                 let app = Self {
-                    tabs: vec![Tab { id: 0, title: "Terminal".into(), custom_title: None, term: t }],
+                    tabs: vec![Tab { id: 0, title: "Terminal".into(), custom_title: None, color: None, term: t }],
                     active_tab: 0,
                     next_id: 1,
                     last_size: None,
                     renaming: None,
                     tab_menu_open: None,
+                    color_submenu_open: false,
                 };
                 (app, focus)
             }
@@ -247,6 +286,7 @@ impl Cratty {
                     last_size: None,
                     renaming: None,
                     tab_menu_open: None,
+                    color_submenu_open: false,
                 };
                 (app, Task::none())
             }
@@ -265,7 +305,7 @@ impl Cratty {
                     ));
                 }
                 let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
-                let tab = Tab { id, title: "Terminal".into(), custom_title: None, term };
+                let tab = Tab { id, title: "Terminal".into(), custom_title: None, color: None, term };
                 let pos = insert_at.min(self.tabs.len());
                 self.tabs.insert(pos, tab);
                 self.active_tab = pos;
@@ -291,7 +331,7 @@ impl Cratty {
         }
         let removed_id = self.tabs[idx].id;
         self.tabs.remove(idx);
-        self.tab_menu_open = None;
+        self.dismiss_menu();
         if self.renaming.as_ref().is_some_and(|r| r.tab_id == removed_id) {
             self.renaming = None;
         }
@@ -304,6 +344,7 @@ impl Cratty {
 
     fn dismiss_menu(&mut self) {
         self.tab_menu_open = None;
+        self.color_submenu_open = false;
     }
 
     /// Whether any UI overlay (menu, rename) is active — used to gate keyboard subscription.
@@ -365,8 +406,12 @@ impl Cratty {
             }
 
             Message::ToggleTabMenu(tab_id) => {
-                self.tab_menu_open =
-                    if self.tab_menu_open == Some(tab_id) { None } else { Some(tab_id) };
+                if self.tab_menu_open == Some(tab_id) {
+                    self.dismiss_menu();
+                } else {
+                    self.dismiss_menu();
+                    self.tab_menu_open = Some(tab_id);
+                }
                 Task::none()
             }
 
@@ -404,6 +449,19 @@ impl Cratty {
                     }
                 }
                 self.focus_active_terminal()
+            }
+
+            Message::SetTabColor(tab_id, color) => {
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id) {
+                    tab.color = color;
+                }
+                self.dismiss_menu();
+                Task::none()
+            }
+
+            Message::OpenColorSubmenu => {
+                self.color_submenu_open = true;
+                Task::none()
             }
 
             Message::EscapePressed => {
@@ -451,10 +509,12 @@ impl Cratty {
 
         if let Some(menu_tab_id) = self.tab_menu_open {
             if let Some(menu_idx) = self.tabs.iter().position(|t| t.id == menu_tab_id) {
+                let menu_x = self.tab_menu_x_offset(menu_idx);
+
                 let menu_overlay: Element<Message> = container(self.view_tab_menu(menu_idx))
                     .padding(iced::Padding {
                         top: TITLEBAR_H,
-                        left: self.tab_menu_x_offset(menu_idx),
+                        left: menu_x,
                         right: 0.0,
                         bottom: 0.0,
                     })
@@ -468,7 +528,30 @@ impl Cratty {
                 .on_press(Message::CloseTabMenu)
                 .into();
 
-                return stack![main_content, scrim, menu_overlay]
+                let mut layers: Vec<Element<Message>> = vec![
+                    main_content,
+                    scrim,
+                    menu_overlay,
+                ];
+
+                // Color submenu: nested panel flush to the right of the main menu
+                if self.color_submenu_open {
+                    // Main menu is 140px wide. Color row is 3rd item (~84px from top).
+                    let color_panel: Element<Message> =
+                        container(self.view_color_panel(menu_idx))
+                            .padding(iced::Padding {
+                                top: TITLEBAR_H + 60.0,
+                                left: menu_x + 140.0,
+                                right: 0.0,
+                                bottom: 0.0,
+                            })
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .into();
+                    layers.push(color_panel);
+                }
+
+                return stack(layers)
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .into();
@@ -500,9 +583,7 @@ impl Cratty {
 
         tabs_items.push(
             button(
-                container(text(ICO_PLUS).size(14).font(PHOSPHOR).color(FG_DIM))
-                    .center_x(Length::Shrink)
-                    .center_y(Length::Shrink),
+                phosphor_icon(ICO_PLUS, 14.0, FG_DIM),
             )
             .on_press(Message::NewTab)
             .padding([4, 8])
@@ -581,21 +662,45 @@ impl Cratty {
         .spacing(TAB_ICON_GAP)
         .align_y(alignment::Vertical::Center);
 
+        let color = tab.color;
         button(tab_row)
             .on_press(Message::SwitchTab(idx))
             .padding([5, TAB_PAD_H as u16])
-            .style(move |_, _| tab_style(active))
+            .style(move |_, _| tab_style(active, color))
             .into()
     }
 
     fn view_tab_menu(&self, idx: usize) -> Element<'_, Message> {
+
+
+        let color_label = row![
+            text("Color").size(12).color(FG_ACTIVE),
+            Space::new().width(Length::Fill),
+            text("›").size(14).color(FG_DIM),
+        ]
+        .width(Length::Fill)
+        .padding([6, 16]);
+
+        let color_bg = if self.color_submenu_open { BG_MENU_HOVER } else { BG_MENU };
+        let color_item: Element<Message> = mouse_area(
+            container(color_label)
+                .width(Length::Fill)
+                .style(move |_| container::Style {
+                    background: Some(iced::Background::Color(color_bg)),
+                    ..Default::default()
+                }),
+        )
+        .on_enter(Message::OpenColorSubmenu)
+        .into();
+
         container(
             column![
                 menu_item("Rename", Message::StartRename(idx)),
                 menu_item("Duplicate", Message::DuplicateTab(idx)),
+                color_item,
                 menu_item("Close", Message::CloseTab(idx)),
             ]
-            .width(120),
+            .width(140),
         )
         .style(|_| container::Style {
             background: Some(iced::Background::Color(BG_MENU)),
@@ -607,6 +712,94 @@ impl Cratty {
             ..Default::default()
         })
         .into()
+    }
+
+    fn view_color_panel(&self, idx: usize) -> Element<'_, Message> {
+        let tab_id = self.tabs[idx].id;
+        let current_color = self.tabs[idx].color;
+
+        let make_swatch = |color: Color, is_selected: bool, tid: u64| -> Element<'_, Message> {
+            button(Space::new().width(18).height(18))
+                .on_press(Message::SetTabColor(tid, Some(color)))
+                .width(24)
+                .height(24)
+                .padding(3)
+                .style(move |_, status| {
+                    let border = if is_selected {
+                        iced::Border { color: FG_ACTIVE, width: 2.0, radius: 4.0.into() }
+                    } else {
+                        match status {
+                            button::Status::Hovered => iced::Border {
+                                color: FG_DIM,
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            _ => iced::Border { radius: 4.0.into(), ..Default::default() },
+                        }
+                    };
+                    button::Style {
+                        background: Some(iced::Background::Color(color)),
+                        border,
+                        ..Default::default()
+                    }
+                })
+                .into()
+        };
+
+        let row1: Vec<Element<Message>> = TAB_COLORS[..4]
+            .iter()
+            .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
+            .collect();
+
+        let mut row2: Vec<Element<Message>> = TAB_COLORS[4..]
+            .iter()
+            .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
+            .collect();
+
+        // Add a "clear" swatch — diagonal cross like Photoshop's "no color"
+        if current_color.is_some() {
+            // Unicode ╳ (U+2573 BOX DRAWINGS LIGHT DIAGONAL CROSS) stretches corner-to-corner
+            row2.push(
+                button(phosphor_icon(ICO_X, 14.0, Color::from_rgb(0.85, 0.2, 0.2)))
+                .on_press(Message::SetTabColor(tab_id, None))
+                .width(24)
+                .height(24)
+                // Nudge: Phosphor X glyph has uneven bearings — compensate
+                .padding(iced::Padding { top: 1.0, right: 0.0, bottom: 0.0, left: 1.0 })
+                .style(|_, status| button::Style {
+                    background: Some(iced::Background::Color(match status {
+                        button::Status::Hovered => Color::from_rgb(0.2, 0.1, 0.1),
+                        _ => Color::from_rgb(0.12, 0.12, 0.12),
+                    })),
+                    border: iced::Border {
+                        color: Color::from_rgb(0.3, 0.15, 0.15),
+                        width: 1.0,
+                        radius: 4.0.into(),
+                    },
+                    ..Default::default()
+                })
+                .into(),
+            );
+        }
+
+        container(
+            column![
+                row(row1).spacing(3),
+                row(row2).spacing(3),
+            ]
+            .spacing(3)
+            .padding(6),
+        )
+            .style(|_| container::Style {
+                background: Some(iced::Background::Color(BG_MENU)),
+                border: iced::Border {
+                    color: FG_MUTED,
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                ..Default::default()
+            })
+            .into()
     }
 
     fn theme(&self) -> Theme {
