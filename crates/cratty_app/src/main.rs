@@ -331,7 +331,7 @@ impl Cratty {
         }
         let removed_id = self.tabs[idx].id;
         self.tabs.remove(idx);
-        self.tab_menu_open = None;
+        self.dismiss_menu();
         if self.renaming.as_ref().is_some_and(|r| r.tab_id == removed_id) {
             self.renaming = None;
         }
@@ -406,8 +406,12 @@ impl Cratty {
             }
 
             Message::ToggleTabMenu(tab_id) => {
-                self.tab_menu_open =
-                    if self.tab_menu_open == Some(tab_id) { None } else { Some(tab_id) };
+                if self.tab_menu_open == Some(tab_id) {
+                    self.dismiss_menu();
+                } else {
+                    self.dismiss_menu();
+                    self.tab_menu_open = Some(tab_id);
+                }
                 Task::none()
             }
 
