@@ -4,20 +4,28 @@ use iced::alignment;
 use iced::widget::{button, mouse_area, row, text, text_input, Space};
 use iced::{Color, Element, Length};
 
-use cratty_core::{Workspace, WorkspaceId};
+use cratty_core::{PaneId, Workspace, WorkspaceId};
 
 use crate::message::{Message, RenameState};
+use crate::pane::Pane;
 use crate::style::*;
 use crate::widgets::*;
 
 pub fn view_titlebar<'a>(
     workspaces: &'a [Workspace], colors: &'a HashMap<WorkspaceId, Color>,
+    panes: &'a HashMap<PaneId, Pane>,
     active: usize, renaming: &'a Option<RenameState>,
 ) -> Element<'a, Message> {
     let mut items: Vec<Element<Message>> = workspaces
         .iter()
         .enumerate()
-        .map(|(idx, ws)| view_ws_tab(idx, ws, colors.get(&ws.id).copied(), active, renaming))
+        .map(|(idx, ws)| {
+            let title = ws.focused_pane()
+                .and_then(|pid| panes.get(&pid))
+                .map(|p| p.display_title())
+                .unwrap_or(&ws.name);
+            view_ws_tab(idx, ws, title, colors.get(&ws.id).copied(), active, renaming)
+        })
         .collect();
 
     items.push(icon_btn(ICO_PLUS, 12.0, FG_DIM, Message::NewWorkspace));
@@ -51,7 +59,7 @@ pub fn view_titlebar<'a>(
 }
 
 fn view_ws_tab<'a>(
-    idx: usize, ws: &'a Workspace, color: Option<Color>,
+    idx: usize, ws: &'a Workspace, display_title: &str, color: Option<Color>,
     active_idx: usize, renaming: &'a Option<RenameState>,
 ) -> Element<'a, Message> {
     let active = idx == active_idx;
@@ -69,7 +77,7 @@ fn view_ws_tab<'a>(
             .style(rename_input_style)
             .into()
     } else {
-        let label = truncate_name(&ws.name, 20);
+        let label = truncate_name(display_title, 20);
         text(label)
             .size(11)
             .color(if active { FG_ACTIVE } else { FG_INACTIVE })

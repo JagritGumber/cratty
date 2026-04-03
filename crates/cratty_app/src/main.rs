@@ -163,6 +163,10 @@ impl Cratty {
                             {
                                 let ws = self.workspaces.remove(idx);
                                 self.ws_colors.remove(&ws.id);
+                                self.dismiss_menu();
+                                if let Some(r) = &self.renaming {
+                                    if r.workspace_id == ws.id { self.renaming = None; }
+                                }
                                 if self.active_ws >= self.workspaces.len()
                                     && !self.workspaces.is_empty()
                                 {
@@ -265,7 +269,7 @@ impl Cratty {
 
     fn view(&self) -> Element<'_, Message> {
         let bar = titlebar::view_titlebar(
-            &self.workspaces, &self.ws_colors, self.active_ws, &self.renaming,
+            &self.workspaces, &self.ws_colors, &self.panes, self.active_ws, &self.renaming,
         );
         let terminal_view: Element<Message> = if let Some(pane) = self.focused_pane() {
             iced::widget::keyed_column(std::iter::once((
