@@ -1,9 +1,9 @@
 use iced::widget::{button, column, container, row, text, Space};
 use iced::{alignment, Color, Element, Length};
 
-use crate::{
-    BG_TERMINAL, FG_ACTIVE, FG_DIM, FG_INACTIVE, FG_MUTED, ICO_PLUS, Message, PHOSPHOR,
-};
+use crate::message::Message;
+use crate::style::*;
+use crate::widgets::*;
 
 const ACCENT: Color = Color::from_rgb(0.30, 0.65, 0.90);
 
@@ -30,9 +30,7 @@ pub fn view_home<'a>() -> Element<'a, Message> {
     .padding([8, 20])
     .style(action_btn_style);
 
-    let shortcut_hint = text("Ctrl+Shift+T")
-        .size(11)
-        .color(FG_DIM);
+    let shortcut_hint = text("Ctrl+Shift+T").size(11).color(FG_DIM);
 
     let content = column![
         logo,
