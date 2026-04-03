@@ -7,6 +7,8 @@ use iced::window;
 use iced::{event, Color, Element, Font, Length, Subscription, Task, Theme};
 use std::path::{Path, PathBuf};
 
+mod home;
+
 // Phosphor Bold icon font — embedded at compile time.
 const PHOSPHOR_BOLD_BYTES: &[u8] = include_bytes!("../resources/fonts/Phosphor-Bold.ttf");
 const PHOSPHOR: Font = Font::with_name("Phosphor-Bold");
@@ -144,6 +146,7 @@ where
 }
 
 /// Phosphor Bold icon text — fill + center for proper alignment in fixed-size buttons.
+/// Phosphor icon with explicit color (for use outside buttons).
 fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'static> {
     text(codepoint)
         .font(PHOSPHOR)
@@ -155,17 +158,34 @@ fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'s
         .shaping(text::Shaping::Advanced)
 }
 
+/// Centered icon element -- container handles centering, no color set so
+/// button style's `text_color` controls it (enables hover color changes).
+fn centered_icon(codepoint: char, size: f32) -> Element<'static, Message> {
+    container(
+        text(codepoint)
+            .font(PHOSPHOR)
+            .size(size)
+            .shaping(text::Shaping::Advanced),
+    )
+    .center(Length::Fill)
+    .into()
+}
+
 /// Small icon button used in tabs (close, kebab).
 fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
-    button(phosphor_icon(icon, size, fg))
+    button(centered_icon(icon, size))
         .on_press(msg)
         .width(TAB_ICON_W)
         .height(TAB_ICON_W)
         .padding(0)
-        .style(|_, status| button::Style {
+        .style(move |_, status| button::Style {
             background: match status {
                 button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
                 _ => None,
+            },
+            text_color: match status {
+                button::Status::Hovered => FG_ACTIVE,
+                _ => fg,
             },
             border: iced::Border { radius: 3.0.into(), ..Default::default() },
             ..Default::default()
@@ -175,19 +195,23 @@ fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, 
 
 /// Window chrome button (minimize / maximize / close).
 fn win_btn(icon: char, msg: Message, fg: Color, hover_bg: Color) -> Element<'static, Message> {
-    button(phosphor_icon(icon, 14.0, fg))
+    button(centered_icon(icon, 14.0))
         .on_press(msg)
         .width(46)
         .height(TITLEBAR_H)
         .padding(0)
-    .style(move |_, status| button::Style {
-        background: match status {
-            button::Status::Hovered => Some(iced::Background::Color(hover_bg)),
-            _ => None,
-        },
-        ..Default::default()
-    })
-    .into()
+        .style(move |_, status| button::Style {
+            background: match status {
+                button::Status::Hovered => Some(iced::Background::Color(hover_bg)),
+                _ => None,
+            },
+            text_color: match status {
+                button::Status::Hovered => FG_ACTIVE,
+                _ => fg,
+            },
+            ..Default::default()
+        })
+        .into()
 }
 
 /// Dropdown menu item.
@@ -263,34 +287,16 @@ fn rename_input_style(_: &Theme, _: text_input::Status) -> text_input::Style {
 
 impl Cratty {
     fn new() -> (Self, Task<Message>) {
-        match new_terminal(0, None) {
-            Ok(t) => {
-                let focus = iced_term::TerminalView::focus::<Message>(t.widget_id().clone());
-                let app = Self {
-                    tabs: vec![Tab { id: 0, title: "Terminal".into(), custom_title: None, color: None, term: t }],
-                    active_tab: 0,
-                    next_id: 1,
-                    last_size: None,
-                    renaming: None,
-                    tab_menu_open: None,
-                    color_submenu_open: false,
-                };
-                (app, focus)
-            }
-            Err(e) => {
-                tracing::error!("Failed to create terminal: {e}");
-                let app = Self {
-                    tabs: vec![],
-                    active_tab: 0,
-                    next_id: 1,
-                    last_size: None,
-                    renaming: None,
-                    tab_menu_open: None,
-                    color_submenu_open: false,
-                };
-                (app, Task::none())
-            }
-        }
+        let app = Self {
+            tabs: vec![],
+            active_tab: 0,
+            next_id: 0,
+            last_size: None,
+            renaming: None,
+            tab_menu_open: None,
+            color_submenu_open: false,
+        };
+        (app, Task::none())
     }
 
     /// Create a new tab, insert it at `insert_at`, switch to it.
@@ -336,7 +342,7 @@ impl Cratty {
             self.renaming = None;
         }
         if self.tabs.is_empty() {
-            return with_window(window::close);
+            return Task::none();
         }
         self.active_tab = self.active_tab.min(self.tabs.len() - 1);
         self.focus_active_terminal()
@@ -497,9 +503,7 @@ impl Cratty {
             .height(Length::Fill)
             .into()
         } else {
-            container(text("No terminal open").size(16))
-                .center(Length::Fill)
-                .into()
+            home::view_home()
         };
 
         let main_content: Element<Message> = column![titlebar, terminal_view]
@@ -581,27 +585,12 @@ impl Cratty {
             .map(|(idx, tab)| self.view_tab(idx, tab))
             .collect();
 
-        tabs_items.push(
-            button(
-                phosphor_icon(ICO_PLUS, 14.0, FG_DIM),
-            )
-            .on_press(Message::NewTab)
-            .padding([4, 8])
-            .style(|_, status| button::Style {
-                background: match status {
-                    button::Status::Hovered => Some(iced::Background::Color(BG_MENU_HOVER)),
-                    _ => None,
-                },
-                border: iced::Border { radius: 4.0.into(), ..Default::default() },
-                ..Default::default()
-            })
-            .into(),
-        );
+        tabs_items.push(icon_btn(ICO_PLUS, 12.0, FG_DIM, Message::NewTab));
 
         let tabs = row(tabs_items)
             .spacing(TAB_ROW_SPACING)
-            .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 0.0, left: TAB_ROW_LEFT })
-            .align_y(alignment::Vertical::Bottom);
+            .padding(iced::Padding { top: 0.0, right: 8.0, bottom: 0.0, left: TAB_ROW_LEFT })
+            .align_y(alignment::Vertical::Center);
 
         let controls = row![
             win_btn(ICO_MINUS, Message::Minimize, FG_DIM, Color::from_rgb(0.2, 0.2, 0.2)),
