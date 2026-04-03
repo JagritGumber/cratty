@@ -26,7 +26,7 @@ pub fn view_home<'a>() -> Element<'a, Message> {
         .spacing(8)
         .align_y(alignment::Vertical::Center),
     )
-    .on_press(Message::NewTab)
+    .on_press(Message::NewWorkspace)
     .padding([8, 20])
     .style(action_btn_style);
 

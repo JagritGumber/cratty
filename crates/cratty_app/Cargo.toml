@@ -8,6 +8,7 @@ name = "cratty"
 path = "src/main.rs"
 
 [dependencies]
+cratty_core = { workspace = true }
 iced = { workspace = true }
 iced_term = { workspace = true }
 anyhow = { workspace = true }
