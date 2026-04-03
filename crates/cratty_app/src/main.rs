@@ -811,7 +811,7 @@ impl Cratty {
                 }
                 if modifiers.control() && modifiers.shift() {
                     if let keyboard::Key::Character(c) = &key {
-                        if c.as_str() == "T" {
+                        if c.as_str().eq_ignore_ascii_case("t") {
                             return Some(Message::NewTab);
                         }
                     }
