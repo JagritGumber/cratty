@@ -188,6 +188,46 @@ event::listen_with(|evt, status, _window| {
 
 Note: `keyboard::listen()` only captures **ignored** events (not consumed by widgets). If you need to catch Escape while a text_input is focused, use `event::listen_with` which sees all events regardless of status.
 
+### Character Key Matching with Modifiers
+
+iced reports `keyboard::Key::Character` as **lowercase** even when Shift is held. Always use case-insensitive comparison:
+
+```rust
+// WRONG: will never match because iced sends "t" not "T"
+if c.as_str() == "T" { ... }
+
+// CORRECT:
+if c.as_str().eq_ignore_ascii_case("t") { ... }
+```
+
+## Button text_color vs Text .color()
+
+`button::Style.text_color` only affects child `Text` widgets that do **NOT** have an explicit `.color()` set. If you call `.color(fg)` on the text, the button style cannot override it.
+
+This matters for hover effects. To change icon color on hover:
+
+```rust
+// WRONG: .color(fg) bakes in the color, hover text_color is ignored
+button(text("X").color(fg))
+    .style(|_, status| button::Style {
+        text_color: match status {
+            Hovered => WHITE,  // ignored because .color() takes precedence
+            _ => fg,
+        },
+        ..Default::default()
+    })
+
+// CORRECT: omit .color(), let text_color control it
+button(text("X"))  // no .color() call
+    .style(|_, status| button::Style {
+        text_color: match status {
+            Hovered => WHITE,  // works
+            _ => fg,
+        },
+        ..Default::default()
+    })
+```
+
 ## Text Input Styling
 
 ```rust
