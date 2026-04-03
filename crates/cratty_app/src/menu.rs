@@ -1,7 +1,9 @@
 use iced::widget::{button, column, container, mouse_area, row, text, Space};
 use iced::{Color, Element, Length};
 
-use crate::message::{Message, Tab};
+use cratty_core::WorkspaceId;
+
+use crate::message::Message;
 use crate::style::*;
 use crate::widgets::*;
 
@@ -29,36 +31,27 @@ pub fn view_tab_menu(idx: usize, color_submenu_open: bool) -> Element<'static, M
     container(
         column![
             menu_item("Rename", Message::StartRename(idx)),
-            menu_item("Duplicate", Message::DuplicateTab(idx)),
+            menu_item("Duplicate", Message::DuplicateWorkspace(idx)),
             color_item,
-            menu_item("Close", Message::CloseTab(idx)),
+            menu_item("Close", Message::CloseWorkspace(idx)),
         ]
         .width(140),
     )
     .style(|_| container::Style {
         background: Some(iced::Background::Color(BG_MENU)),
-        border: iced::Border {
-            color: FG_MUTED,
-            width: 1.0,
-            radius: 4.0.into(),
-        },
+        border: iced::Border { color: FG_MUTED, width: 1.0, radius: 4.0.into() },
         ..Default::default()
     })
     .into()
 }
 
-pub fn view_color_panel(tab: &Tab) -> Element<'_, Message> {
-    let tab_id = tab.id;
-    let current_color = tab.color;
-
-    let make_swatch = |color: Color, is_selected: bool, tid: u64| -> Element<'_, Message> {
+pub fn view_color_panel(ws_id: WorkspaceId, current: Option<Color>) -> Element<'static, Message> {
+    let make_swatch = |color: Color, selected: bool| -> Element<'static, Message> {
         button(Space::new().width(18).height(18))
-            .on_press(Message::SetTabColor(tid, Some(color)))
-            .width(24)
-            .height(24)
-            .padding(3)
+            .on_press(Message::SetWorkspaceColor(ws_id, Some(color)))
+            .width(24).height(24).padding(3)
             .style(move |_, status| {
-                let border = if is_selected {
+                let border = if selected {
                     iced::Border { color: FG_ACTIVE, width: 2.0, radius: 4.0.into() }
                 } else {
                     match status {
@@ -77,22 +70,16 @@ pub fn view_color_panel(tab: &Tab) -> Element<'_, Message> {
             .into()
     };
 
-    let row1: Vec<Element<Message>> = TAB_COLORS[..4]
-        .iter()
-        .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
-        .collect();
+    let r1: Vec<Element<Message>> = TAB_COLORS[..4].iter()
+        .map(|(c, _)| make_swatch(*c, current == Some(*c))).collect();
+    let mut r2: Vec<Element<Message>> = TAB_COLORS[4..].iter()
+        .map(|(c, _)| make_swatch(*c, current == Some(*c))).collect();
 
-    let mut row2: Vec<Element<Message>> = TAB_COLORS[4..]
-        .iter()
-        .map(|(c, _)| make_swatch(*c, current_color == Some(*c), tab_id))
-        .collect();
-
-    if current_color.is_some() {
-        row2.push(
+    if current.is_some() {
+        r2.push(
             button(phosphor_icon(ICO_X, 14.0, Color::from_rgb(0.85, 0.2, 0.2)))
-                .on_press(Message::SetTabColor(tab_id, None))
-                .width(24)
-                .height(24)
+                .on_press(Message::SetWorkspaceColor(ws_id, None))
+                .width(24).height(24)
                 .padding(iced::Padding { top: 1.0, right: 0.0, bottom: 0.0, left: 1.0 })
                 .style(|_, status| button::Style {
                     background: Some(iced::Background::Color(match status {
@@ -100,9 +87,7 @@ pub fn view_color_panel(tab: &Tab) -> Element<'_, Message> {
                         _ => Color::from_rgb(0.12, 0.12, 0.12),
                     })),
                     border: iced::Border {
-                        color: Color::from_rgb(0.3, 0.15, 0.15),
-                        width: 1.0,
-                        radius: 4.0.into(),
+                        color: Color::from_rgb(0.3, 0.15, 0.15), width: 1.0, radius: 4.0.into(),
                     },
                     ..Default::default()
                 })
@@ -110,7 +95,7 @@ pub fn view_color_panel(tab: &Tab) -> Element<'_, Message> {
         );
     }
 
-    container(column![row(row1).spacing(3), row(row2).spacing(3)].spacing(3).padding(6))
+    container(column![row(r1).spacing(3), row(r2).spacing(3)].spacing(3).padding(6))
         .style(|_| container::Style {
             background: Some(iced::Background::Color(BG_MENU)),
             border: iced::Border { color: FG_MUTED, width: 1.0, radius: 4.0.into() },

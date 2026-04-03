@@ -1,21 +1,26 @@
+use std::collections::HashMap;
+
 use iced::alignment;
 use iced::widget::{button, mouse_area, row, text, text_input, Space};
 use iced::{Color, Element, Length};
 
-use crate::message::{Message, RenameState, Tab};
+use cratty_core::{Workspace, WorkspaceId};
+
+use crate::message::{Message, RenameState};
 use crate::style::*;
 use crate::widgets::*;
 
 pub fn view_titlebar<'a>(
-    tabs: &'a [Tab], active_tab: usize, renaming: &'a Option<RenameState>,
+    workspaces: &'a [Workspace], colors: &'a HashMap<WorkspaceId, Color>,
+    active: usize, renaming: &'a Option<RenameState>,
 ) -> Element<'a, Message> {
-    let mut items: Vec<Element<Message>> = tabs
+    let mut items: Vec<Element<Message>> = workspaces
         .iter()
         .enumerate()
-        .map(|(idx, tab)| view_tab(idx, tab, active_tab, renaming))
+        .map(|(idx, ws)| view_ws_tab(idx, ws, colors.get(&ws.id).copied(), active, renaming))
         .collect();
 
-    items.push(icon_btn(ICO_PLUS, 12.0, FG_DIM, Message::NewTab));
+    items.push(icon_btn(ICO_PLUS, 12.0, FG_DIM, Message::NewWorkspace));
 
     let tabs_row = row(items)
         .spacing(TAB_ROW_SPACING)
@@ -45,16 +50,17 @@ pub fn view_titlebar<'a>(
     .into()
 }
 
-fn view_tab<'a>(
-    idx: usize, tab: &'a Tab, active_tab: usize, renaming: &'a Option<RenameState>,
+fn view_ws_tab<'a>(
+    idx: usize, ws: &'a Workspace, color: Option<Color>,
+    active_idx: usize, renaming: &'a Option<RenameState>,
 ) -> Element<'a, Message> {
-    let active = idx == active_tab;
-    let is_renaming = renaming.as_ref().is_some_and(|r| r.tab_id == tab.id);
+    let active = idx == active_idx;
+    let is_renaming = renaming.as_ref().is_some_and(|r| r.workspace_id == ws.id);
     let icon_fg = if active { FG_DIM } else { FG_MUTED };
 
     let tab_content: Element<Message> = if is_renaming {
         let input_val = renaming.as_ref().unwrap().input.clone();
-        text_input("Tab name (empty to reset)", &input_val)
+        text_input("Name (empty to reset)", &input_val)
             .on_input(Message::RenameInput)
             .on_submit(Message::ConfirmRename)
             .size(11)
@@ -63,12 +69,7 @@ fn view_tab<'a>(
             .style(rename_input_style)
             .into()
     } else {
-        let display = tab.display_title();
-        let label: String = if display.chars().count() > 20 {
-            format!("{}...", display.chars().take(17).collect::<String>())
-        } else {
-            display.to_string()
-        };
+        let label = truncate_name(&ws.name, 20);
         text(label)
             .size(11)
             .color(if active { FG_ACTIVE } else { FG_INACTIVE })
@@ -77,16 +78,39 @@ fn view_tab<'a>(
 
     let tab_row = row![
         tab_content,
-        icon_btn(ICO_DOTS_THREE_V, 14.0, icon_fg, Message::ToggleTabMenu(tab.id)),
-        icon_btn(ICO_X, 10.0, icon_fg, Message::CloseTab(idx)),
+        icon_btn(ICO_DOTS_THREE_V, 14.0, icon_fg, Message::ToggleTabMenu(ws.id)),
+        icon_btn(ICO_X, 10.0, icon_fg, Message::CloseWorkspace(idx)),
     ]
     .spacing(TAB_ICON_GAP)
     .align_y(alignment::Vertical::Center);
 
-    let color = tab.color;
     button(tab_row)
-        .on_press(Message::SwitchTab(idx))
+        .on_press(Message::SwitchWorkspace(idx))
         .padding([5, TAB_PAD_H as u16])
         .style(move |_, _| tab_style(active, color))
         .into()
+}
+
+fn truncate_name(name: &str, max: usize) -> String {
+    if name.chars().count() > max {
+        format!("{}...", name.chars().take(max - 3).collect::<String>())
+    } else {
+        name.to_string()
+    }
+}
+
+pub fn tab_menu_x_offset(
+    workspaces: &[Workspace], renaming: &Option<RenameState>, idx: usize,
+) -> f32 {
+    let mut x = TAB_ROW_LEFT;
+    for (i, ws) in workspaces.iter().enumerate() {
+        if i == idx { break; }
+        let is_renaming = renaming.as_ref().is_some_and(|r| r.workspace_id == ws.id);
+        let text_w = if is_renaming { 120.0 } else {
+            ws.name.chars().count().min(20) as f32 * TAB_CHAR_W
+        };
+        x += text_w + TAB_ICON_GAP + TAB_ICON_W + TAB_ICON_GAP + TAB_ICON_W
+            + TAB_PAD_H * 2.0 + TAB_ROW_SPACING;
+    }
+    x
 }

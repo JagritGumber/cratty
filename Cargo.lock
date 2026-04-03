@@ -644,6 +644,7 @@ name = "cratty_app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cratty_core",
  "iced",
  "iced_term",
  "tracing",
