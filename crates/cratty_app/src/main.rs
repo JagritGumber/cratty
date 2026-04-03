@@ -801,21 +801,26 @@ impl Cratty {
             .iter()
             .map(|tab| tab.term.subscription().map(Message::TermEvent));
 
-        // Only intercept Escape when an overlay is active, so terminal apps
-        // (vim, htop, etc.) receive Escape normally at all other times.
-        if self.has_overlay() {
-            let esc_sub = event::listen_with(|evt, _status, _window| {
-                if let iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) = evt {
-                    if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
-                        return Some(Message::EscapePressed);
+        let key_sub = event::listen_with(|evt, _status, _window| {
+            if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                key, modifiers, ..
+            }) = evt
+            {
+                if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                    return Some(Message::EscapePressed);
+                }
+                if modifiers.control() && modifiers.shift() {
+                    if let keyboard::Key::Character(c) = &key {
+                        if c.as_str() == "T" {
+                            return Some(Message::NewTab);
+                        }
                     }
                 }
-                None
-            });
-            Subscription::batch(term_subs.chain(std::iter::once(esc_sub)))
-        } else {
-            Subscription::batch(term_subs)
-        }
+            }
+            None
+        });
+
+        Subscription::batch(term_subs.chain(std::iter::once(key_sub)))
     }
 }
 
