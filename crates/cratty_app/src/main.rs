@@ -667,15 +667,7 @@ impl Cratty {
     }
 
     fn view_tab_menu(&self, idx: usize) -> Element<'_, Message> {
-        let separator = || {
-            container(Space::new())
-                .width(Length::Fill)
-                .height(1)
-                .style(|_| container::Style {
-                    background: Some(iced::Background::Color(FG_MUTED)),
-                    ..Default::default()
-                })
-        };
+
 
         let color_label = row![
             text("Color").size(12).color(FG_ACTIVE),
@@ -701,9 +693,7 @@ impl Cratty {
             column![
                 menu_item("Rename", Message::StartRename(idx)),
                 menu_item("Duplicate", Message::DuplicateTab(idx)),
-                separator(),
                 color_item,
-                separator(),
                 menu_item("Close", Message::CloseTab(idx)),
             ]
             .width(140),
