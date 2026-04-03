@@ -89,6 +89,41 @@ Register the font: `.font(PHOSPHOR_BOLD_BYTES)` on the application builder.
 
 Usage: `text(ICO_X).font(PHOSPHOR).size(14)`
 
+### Centering Icons in Buttons
+
+**Do NOT use `text.width(Fill).height(Fill).center()`** inside buttons. It does not reliably center Phosphor glyphs. Instead, wrap in a `container` with `.center(Length::Fill)`:
+
+```rust
+fn centered_icon(codepoint: char, size: f32) -> Element<'static, Message> {
+    container(
+        text(codepoint)
+            .font(PHOSPHOR)
+            .size(size)
+            .shaping(text::Shaping::Advanced),
+    )
+    .center(Length::Fill)
+    .into()
+}
+
+// Button with fixed size, padding(0), hover color via text_color:
+button(centered_icon(ICO_X, 12.0))
+    .width(18)
+    .height(18)
+    .padding(0)
+    .style(move |_, status| button::Style {
+        text_color: match status {
+            button::Status::Hovered => FG_ACTIVE,
+            _ => fg,
+        },
+        ..Default::default()
+    })
+```
+
+Key rules:
+- Do NOT set `.color()` on the text -- it prevents button style `text_color` from working (needed for hover)
+- Always use fixed `width` + `height` on the button -- `Length::Fill` causes expansion into empty space
+- `padding(0)` -- the container handles centering, padding would offset it
+
 ## Per-Corner Border Radius
 
 `iced::border::Radius` supports per-corner values via builder methods:
