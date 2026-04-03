@@ -56,6 +56,24 @@ fn remove_adjusts_focus() {
 }
 
 #[test]
+fn remove_before_focus_preserves_target() {
+    let mut ids = IdGen::new();
+    let mut strip = PaperStrip::new();
+    let p0 = ids.next_pane();
+    let p1 = ids.next_pane();
+    let p2 = ids.next_pane();
+    strip.push(p0);
+    strip.push(p1);
+    strip.push(p2);
+    // focus on p1
+    strip.focus_idx = 1;
+
+    strip.remove(p0); // remove before focus
+    assert_eq!(strip.focus_idx, 0);
+    assert_eq!(strip.focused_pane(), Some(p1)); // still focused on p1
+}
+
+#[test]
 fn remove_nonexistent_returns_false() {
     let mut ids = IdGen::new();
     let mut strip = PaperStrip::new();

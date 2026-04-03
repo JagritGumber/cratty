@@ -46,7 +46,11 @@ impl PaperStrip {
     pub fn remove(&mut self, pane: PaneId) -> bool {
         if let Some(idx) = self.panes.iter().position(|&p| p == pane) {
             self.panes.remove(idx);
-            if self.focus_idx >= self.panes.len() && !self.panes.is_empty() {
+            if self.panes.is_empty() {
+                self.focus_idx = 0;
+            } else if idx < self.focus_idx {
+                self.focus_idx -= 1;
+            } else if self.focus_idx >= self.panes.len() {
                 self.focus_idx = self.panes.len() - 1;
             }
             true
