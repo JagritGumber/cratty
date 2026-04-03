@@ -12,6 +12,8 @@ mod home;
 mod menu;
 mod message;
 mod pane;
+mod sidebar;
+mod strip_view;
 mod style;
 mod terminal;
 mod titlebar;
@@ -133,6 +135,46 @@ impl Cratty {
         self.focus_active_terminal()
     }
 
+    fn add_pane_to_active_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
+        let ws = match self.workspaces.get_mut(self.active_ws) {
+            Some(ws) => ws,
+            None => return self.create_workspace(cwd),
+        };
+        let pane_id = self.id_gen.next_pane();
+        let term_id = pane_id.0;
+        match terminal::new_terminal(term_id, cwd) {
+            Ok(mut term) => {
+                if let Some(size) = self.last_size {
+                    term.handle(iced_term::Command::ProxyToBackend(
+                        iced_term::BackendCommand::Resize(Some(size), None),
+                    ));
+                }
+                let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
+                self.panes.insert(pane_id, Pane::new(pane_id, term_id, term));
+                ws.strip.push(pane_id);
+                Task::batch([focus, self.scroll_to_focused_pane()])
+            }
+            Err(_) => Task::none(),
+        }
+    }
+
+    fn remove_pane(&mut self, pid: PaneId) -> Task<Message> {
+        self.panes.remove(&pid);
+        for ws in &mut self.workspaces {
+            ws.strip.remove(pid);
+        }
+        // Remove empty workspaces
+        self.workspaces.retain(|ws| !ws.is_empty());
+        if self.active_ws >= self.workspaces.len() && !self.workspaces.is_empty() {
+            self.active_ws = self.workspaces.len() - 1;
+        }
+        self.focus_active_terminal()
+    }
+
+    fn scroll_to_focused_pane(&self) -> Task<Message> {
+        self.focus_active_terminal()
+    }
+
     fn dismiss_menu(&mut self) {
         self.tab_menu_open = None;
         self.color_submenu_open = false;
@@ -208,6 +250,27 @@ impl Cratty {
                 self.active_ws = idx;
                 self.focus_active_terminal()
             }
+            Message::NewPane => {
+                self.dismiss_menu();
+                self.add_pane_to_active_workspace(None)
+            }
+            Message::ClosePane(pid) => self.remove_pane(pid),
+            Message::FocusPaneLeft => {
+                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+                    if ws.strip.focus_left() {
+                        return self.scroll_to_focused_pane();
+                    }
+                }
+                Task::none()
+            }
+            Message::FocusPaneRight => {
+                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+                    if ws.strip.focus_right() {
+                        return self.scroll_to_focused_pane();
+                    }
+                }
+                Task::none()
+            }
             Message::ToggleTabMenu(ws_id) => {
                 if self.tab_menu_open == Some(ws_id) {
                     self.dismiss_menu();
@@ -268,67 +331,29 @@ impl Cratty {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let bar = titlebar::view_titlebar(
-            &self.workspaces, &self.ws_colors, &self.panes, self.active_ws, &self.renaming,
-        );
-        let terminal_view: Element<Message> = if let Some(pane) = self.focused_pane() {
-            iced::widget::keyed_column(std::iter::once((
-                pane.term_id,
-                container(
-                    iced_term::TerminalView::show(&pane.terminal).map(Message::TermEvent),
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into(),
-            )))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        use iced::widget::row;
+        let bar = titlebar::view_titlebar();
+
+        let main_area: Element<Message> = if let Some(ws) = self.workspaces.get(self.active_ws) {
+            if ws.is_empty() {
+                home::view_home()
+            } else {
+                strip_view::view_strip(&ws.strip, &self.panes)
+            }
         } else {
             home::view_home()
         };
 
-        let main_content: Element<Message> = column![bar, terminal_view]
-            .width(Length::Fill).height(Length::Fill).into();
+        let sidebar = sidebar::view_sidebar(
+            &self.workspaces, &self.ws_colors, &self.panes, self.active_ws,
+        );
 
-        if let Some(menu_ws_id) = self.tab_menu_open {
-            if let Some(menu_idx) = self.workspaces.iter().position(|w| w.id == menu_ws_id) {
-                let menu_x = titlebar::tab_menu_x_offset(
-                    &self.workspaces, &self.renaming, menu_idx,
-                );
-                return self.view_menu_overlay(main_content, menu_idx, menu_x);
-            }
-        }
-        main_content
-    }
+        let body: Element<Message> = row![sidebar, main_area]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
 
-    fn view_menu_overlay<'a>(
-        &'a self, main_content: Element<'a, Message>, idx: usize, menu_x: f32,
-    ) -> Element<'a, Message> {
-        let ws = &self.workspaces[idx];
-        let menu_overlay: Element<Message> = container(
-            menu::view_tab_menu(idx, self.color_submenu_open),
-        )
-        .padding(iced::Padding { top: TITLEBAR_H, left: menu_x, right: 0.0, bottom: 0.0 })
-        .width(Length::Fill).height(Length::Fill).into();
-
-        let scrim: Element<Message> = mouse_area(
-            container(Space::new()).width(Length::Fill).height(Length::Fill),
-        ).on_press(Message::CloseTabMenu).into();
-
-        let mut layers: Vec<Element<Message>> = vec![main_content, scrim, menu_overlay];
-        if self.color_submenu_open {
-            let color = self.ws_colors.get(&ws.id).copied();
-            let panel: Element<Message> = container(
-                menu::view_color_panel(ws.id, color),
-            )
-            .padding(iced::Padding {
-                top: TITLEBAR_H + 60.0, left: menu_x + 140.0, right: 0.0, bottom: 0.0,
-            })
-            .width(Length::Fill).height(Length::Fill).into();
-            layers.push(panel);
-        }
-        stack(layers).width(Length::Fill).height(Length::Fill).into()
+        column![bar, body].width(Length::Fill).height(Length::Fill).into()
     }
 
     fn theme(&self) -> Theme { Theme::Dark }
@@ -347,6 +372,18 @@ impl Cratty {
                     if let keyboard::Key::Character(c) = &key {
                         if c.as_str().eq_ignore_ascii_case("t") {
                             return Some(Message::NewWorkspace);
+                        }
+                        if c.as_str().eq_ignore_ascii_case("n") {
+                            return Some(Message::NewPane);
+                        }
+                    }
+                    if let keyboard::Key::Named(named) = &key {
+                        match named {
+                            keyboard::key::Named::ArrowLeft =>
+                                return Some(Message::FocusPaneLeft),
+                            keyboard::key::Named::ArrowRight =>
+                                return Some(Message::FocusPaneRight),
+                            _ => {}
                         }
                     }
                 }
