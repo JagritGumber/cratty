@@ -68,17 +68,18 @@ fn view_ws_item(
         })
         .into();
 
-    let label = truncate(title, 18);
-    let count_label = if pane_count > 1 {
+    let count_suffix = if pane_count > 1 {
         format!(" ({})", pane_count)
     } else {
         String::new()
     };
+    let max_title = 18_usize.saturating_sub(count_suffix.len());
+    let label = truncate(title, max_title);
 
     let content = row![
         accent_bar,
         Space::new().width(8),
-        text(format!("{}{}", label, count_label))
+        text(format!("{}{}", label, count_suffix))
             .size(12)
             .color(if active { FG_ACTIVE } else { FG_INACTIVE }),
     ]

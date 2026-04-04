@@ -144,7 +144,7 @@ impl Cratty {
                 let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
                 self.panes.insert(pane_id, Pane::new(pane_id, term_id, term));
                 ws.strip.push(pane_id);
-                Task::batch([focus, self.focus_active_terminal()])
+                focus
             }
             Err(_) => Task::none(),
         }
