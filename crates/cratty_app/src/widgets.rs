@@ -11,18 +11,6 @@ pub const ICO_MINUS: char = '\u{E32A}';
 pub const ICO_SQUARE: char = '\u{E45E}';
 pub const ICO_X: char = '\u{E4F6}';
 pub const ICO_PLUS: char = '\u{E3D4}';
-pub const ICO_DOTS_THREE_V: char = '\u{E208}';
-
-pub fn phosphor_icon(codepoint: char, size: f32, fg: Color) -> iced::widget::Text<'static> {
-    text(codepoint)
-        .font(PHOSPHOR)
-        .size(size)
-        .color(fg)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center()
-        .shaping(text::Shaping::Advanced)
-}
 
 pub fn centered_icon(codepoint: char, size: f32) -> Element<'static, Message> {
     container(
@@ -33,27 +21,6 @@ pub fn centered_icon(codepoint: char, size: f32) -> Element<'static, Message> {
     )
     .center(Length::Fill)
     .into()
-}
-
-pub fn icon_btn(icon: char, size: f32, fg: Color, msg: Message) -> Element<'static, Message> {
-    button(centered_icon(icon, size))
-        .on_press(msg)
-        .width(TAB_ICON_W)
-        .height(TAB_ICON_W)
-        .padding(0)
-        .style(move |_, status| button::Style {
-            background: match status {
-                button::Status::Hovered => Some(iced::Background::Color(BG_HOVER_SUBTLE)),
-                _ => None,
-            },
-            text_color: match status {
-                button::Status::Hovered => FG_ACTIVE,
-                _ => fg,
-            },
-            border: iced::Border { radius: 3.0.into(), ..Default::default() },
-            ..Default::default()
-        })
-        .into()
 }
 
 pub fn win_btn(
@@ -73,21 +40,6 @@ pub fn win_btn(
                 button::Status::Hovered => FG_ACTIVE,
                 _ => fg,
             },
-            ..Default::default()
-        })
-        .into()
-}
-
-pub fn menu_item(label: &str, msg: Message) -> Element<'_, Message> {
-    button(text(label).size(12).color(FG_ACTIVE))
-        .on_press(msg)
-        .padding([6, 16])
-        .width(Length::Fill)
-        .style(|_, status| button::Style {
-            background: Some(iced::Background::Color(match status {
-                button::Status::Hovered => BG_MENU_HOVER,
-                _ => BG_MENU,
-            })),
             ..Default::default()
         })
         .into()

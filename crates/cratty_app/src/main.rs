@@ -2,24 +2,24 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use iced::keyboard;
-use iced::widget::{column, container, mouse_area, stack, Space};
+use iced::widget::column;
 use iced::window;
 use iced::{event, Color, Element, Length, Subscription, Task, Theme};
 
 use cratty_core::{IdGen, PaneId, Workspace, WorkspaceId};
 
 mod home;
-mod menu;
 mod message;
 mod pane;
+mod sidebar;
+mod strip_view;
 mod style;
 mod terminal;
 mod titlebar;
 mod widgets;
 
-use message::{Message, RenameState};
+use message::Message;
 use pane::Pane;
-use style::*;
 use widgets::PHOSPHOR_BOLD_BYTES;
 
 fn main() -> iced::Result {
@@ -48,9 +48,6 @@ struct Cratty {
     ws_colors: HashMap<WorkspaceId, Color>,
     id_gen: IdGen,
     last_size: Option<iced::Size>,
-    renaming: Option<RenameState>,
-    tab_menu_open: Option<WorkspaceId>,
-    color_submenu_open: bool,
 }
 
 fn with_window<F, T>(f: F) -> Task<T>
@@ -70,9 +67,6 @@ impl Cratty {
             ws_colors: HashMap::new(),
             id_gen: IdGen::new(),
             last_size: None,
-            renaming: None,
-            tab_menu_open: None,
-            color_submenu_open: false,
         }, Task::none())
     }
 
@@ -117,25 +111,63 @@ impl Cratty {
         if idx >= self.workspaces.len() {
             return Task::none();
         }
+        let active_id = self.workspaces.get(self.active_ws).map(|w| w.id);
         let ws = self.workspaces.remove(idx);
         for pane_id in &ws.strip.panes {
             self.panes.remove(pane_id);
         }
         self.ws_colors.remove(&ws.id);
-        self.dismiss_menu();
-        if let Some(r) = &self.renaming {
-            if r.workspace_id == ws.id { self.renaming = None; }
-        }
         if self.workspaces.is_empty() {
+            self.active_ws = 0;
             return Task::none();
         }
-        self.active_ws = self.active_ws.min(self.workspaces.len() - 1);
+        self.active_ws = active_id
+            .and_then(|id| self.workspaces.iter().position(|w| w.id == id))
+            .unwrap_or(self.active_ws.min(self.workspaces.len() - 1));
         self.focus_active_terminal()
     }
 
-    fn dismiss_menu(&mut self) {
-        self.tab_menu_open = None;
-        self.color_submenu_open = false;
+    fn add_pane_to_active_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
+        let ws = match self.workspaces.get_mut(self.active_ws) {
+            Some(ws) => ws,
+            None => return self.create_workspace(cwd),
+        };
+        let pane_id = self.id_gen.next_pane();
+        let term_id = pane_id.0;
+        match terminal::new_terminal(term_id, cwd) {
+            Ok(mut term) => {
+                if let Some(size) = self.last_size {
+                    term.handle(iced_term::Command::ProxyToBackend(
+                        iced_term::BackendCommand::Resize(Some(size), None),
+                    ));
+                }
+                let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
+                self.panes.insert(pane_id, Pane::new(pane_id, term_id, term));
+                ws.strip.push(pane_id);
+                focus
+            }
+            Err(_) => Task::none(),
+        }
+    }
+
+    fn remove_pane(&mut self, pid: PaneId) -> Task<Message> {
+        self.panes.remove(&pid);
+        let active_id = self.workspaces.get(self.active_ws).map(|w| w.id);
+        for ws in &mut self.workspaces {
+            ws.strip.remove(pid);
+        }
+        let empty_ids: Vec<WorkspaceId> = self.workspaces.iter()
+            .filter(|ws| ws.is_empty()).map(|ws| ws.id).collect();
+        for id in &empty_ids {
+            self.ws_colors.remove(id);
+        }
+        self.workspaces.retain(|ws| !ws.is_empty());
+        self.active_ws = active_id
+            .and_then(|id| self.workspaces.iter().position(|w| w.id == id))
+            .unwrap_or(self.active_ws.min(
+                self.workspaces.len().saturating_sub(1),
+            ));
+        self.focus_active_terminal()
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -149,32 +181,11 @@ impl Cratty {
                     .map(|p| p.terminal.handle(iced_term::Command::ProxyToBackend(cmd)));
                 match action {
                     Some(iced_term::actions::Action::Shutdown) => {
-                        // Find and remove the pane, close workspace if empty
                         if let Some(pid) = self.panes.values()
                             .find(|p| p.term_id == term_id).map(|p| p.id)
                         {
-                            self.panes.remove(&pid);
-                            for ws in &mut self.workspaces {
-                                ws.strip.remove(pid);
-                            }
-                            // Remove empty workspaces
-                            if let Some(idx) = self.workspaces.iter()
-                                .position(|ws| ws.is_empty())
-                            {
-                                let ws = self.workspaces.remove(idx);
-                                self.ws_colors.remove(&ws.id);
-                                self.dismiss_menu();
-                                if let Some(r) = &self.renaming {
-                                    if r.workspace_id == ws.id { self.renaming = None; }
-                                }
-                                if self.active_ws >= self.workspaces.len()
-                                    && !self.workspaces.is_empty()
-                                {
-                                    self.active_ws = self.workspaces.len() - 1;
-                                }
-                            }
+                            return self.remove_pane(pid);
                         }
-                        return self.focus_active_terminal();
                     }
                     Some(iced_term::actions::Action::ChangeTitle(title)) => {
                         if let Some(p) = self.panes.values_mut()
@@ -187,79 +198,32 @@ impl Cratty {
                 }
                 Task::none()
             }
-            Message::NewWorkspace => {
-                self.dismiss_menu();
-                self.create_workspace(None)
-            }
-            Message::DuplicateWorkspace(idx) => {
-                self.dismiss_menu();
-                let cwd = self.workspaces.get(idx)
-                    .and_then(|ws| ws.focused_pane())
-                    .and_then(|pid| self.panes.get(&pid))
-                    .and_then(|p| terminal::extract_cwd(&p.title));
-                self.create_workspace(cwd)
-            }
+            Message::NewWorkspace => self.create_workspace(None),
             Message::CloseWorkspace(idx) => self.close_workspace(idx),
             Message::SwitchWorkspace(idx) => {
-                if self.renaming.is_some() || idx >= self.workspaces.len() {
-                    return Task::none();
-                }
-                self.dismiss_menu();
+                if idx >= self.workspaces.len() { return Task::none(); }
                 self.active_ws = idx;
                 self.focus_active_terminal()
             }
-            Message::ToggleTabMenu(ws_id) => {
-                if self.tab_menu_open == Some(ws_id) {
-                    self.dismiss_menu();
-                } else {
-                    self.dismiss_menu();
-                    self.tab_menu_open = Some(ws_id);
-                }
-                Task::none()
-            }
-            Message::CloseTabMenu => { self.dismiss_menu(); Task::none() }
-            Message::StartRename(idx) => {
-                self.dismiss_menu();
-                if let Some(ws) = self.workspaces.get(idx) {
-                    self.renaming = Some(RenameState {
-                        workspace_id: ws.id,
-                        input: ws.name.clone(),
-                    });
-                    iced::widget::operation::focus_next()
-                } else { Task::none() }
-            }
-            Message::RenameInput(val) => {
-                if let Some(s) = &mut self.renaming { s.input = val; }
-                Task::none()
-            }
-            Message::ConfirmRename => {
-                if let Some(state) = self.renaming.take() {
-                    if let Some(ws) = self.workspaces.iter_mut()
-                        .find(|w| w.id == state.workspace_id)
-                    {
-                        let trimmed = state.input.trim();
-                        if !trimmed.is_empty() { ws.name = trimmed.into(); }
+            Message::NewPane => self.add_pane_to_active_workspace(None),
+            Message::ClosePane(pid) => self.remove_pane(pid),
+            Message::FocusPaneLeft => {
+                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+                    if ws.strip.focus_left() {
+                        return self.focus_active_terminal();
                     }
                 }
-                self.focus_active_terminal()
-            }
-            Message::SetWorkspaceColor(ws_id, color) => {
-                match color {
-                    Some(c) => { self.ws_colors.insert(ws_id, c); }
-                    None => { self.ws_colors.remove(&ws_id); }
-                }
-                self.dismiss_menu();
                 Task::none()
             }
-            Message::OpenColorSubmenu => { self.color_submenu_open = true; Task::none() }
-            Message::EscapePressed => {
-                if self.renaming.is_some() {
-                    self.renaming = None;
-                    return self.focus_active_terminal();
+            Message::FocusPaneRight => {
+                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+                    if ws.strip.focus_right() {
+                        return self.focus_active_terminal();
+                    }
                 }
-                self.dismiss_menu();
                 Task::none()
             }
+            Message::EscapePressed => Task::none(),
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
@@ -268,67 +232,29 @@ impl Cratty {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let bar = titlebar::view_titlebar(
-            &self.workspaces, &self.ws_colors, &self.panes, self.active_ws, &self.renaming,
-        );
-        let terminal_view: Element<Message> = if let Some(pane) = self.focused_pane() {
-            iced::widget::keyed_column(std::iter::once((
-                pane.term_id,
-                container(
-                    iced_term::TerminalView::show(&pane.terminal).map(Message::TermEvent),
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into(),
-            )))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        use iced::widget::row;
+        let bar = titlebar::view_titlebar();
+
+        let main_area: Element<Message> = if let Some(ws) = self.workspaces.get(self.active_ws) {
+            if ws.is_empty() {
+                home::view_home()
+            } else {
+                strip_view::view_strip(&ws.strip, &self.panes)
+            }
         } else {
             home::view_home()
         };
 
-        let main_content: Element<Message> = column![bar, terminal_view]
-            .width(Length::Fill).height(Length::Fill).into();
+        let sidebar = sidebar::view_sidebar(
+            &self.workspaces, &self.ws_colors, &self.panes, self.active_ws,
+        );
 
-        if let Some(menu_ws_id) = self.tab_menu_open {
-            if let Some(menu_idx) = self.workspaces.iter().position(|w| w.id == menu_ws_id) {
-                let menu_x = titlebar::tab_menu_x_offset(
-                    &self.workspaces, &self.renaming, menu_idx,
-                );
-                return self.view_menu_overlay(main_content, menu_idx, menu_x);
-            }
-        }
-        main_content
-    }
+        let body: Element<Message> = row![sidebar, main_area]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
 
-    fn view_menu_overlay<'a>(
-        &'a self, main_content: Element<'a, Message>, idx: usize, menu_x: f32,
-    ) -> Element<'a, Message> {
-        let ws = &self.workspaces[idx];
-        let menu_overlay: Element<Message> = container(
-            menu::view_tab_menu(idx, self.color_submenu_open),
-        )
-        .padding(iced::Padding { top: TITLEBAR_H, left: menu_x, right: 0.0, bottom: 0.0 })
-        .width(Length::Fill).height(Length::Fill).into();
-
-        let scrim: Element<Message> = mouse_area(
-            container(Space::new()).width(Length::Fill).height(Length::Fill),
-        ).on_press(Message::CloseTabMenu).into();
-
-        let mut layers: Vec<Element<Message>> = vec![main_content, scrim, menu_overlay];
-        if self.color_submenu_open {
-            let color = self.ws_colors.get(&ws.id).copied();
-            let panel: Element<Message> = container(
-                menu::view_color_panel(ws.id, color),
-            )
-            .padding(iced::Padding {
-                top: TITLEBAR_H + 60.0, left: menu_x + 140.0, right: 0.0, bottom: 0.0,
-            })
-            .width(Length::Fill).height(Length::Fill).into();
-            layers.push(panel);
-        }
-        stack(layers).width(Length::Fill).height(Length::Fill).into()
+        column![bar, body].width(Length::Fill).height(Length::Fill).into()
     }
 
     fn theme(&self) -> Theme { Theme::Dark }
@@ -347,6 +273,18 @@ impl Cratty {
                     if let keyboard::Key::Character(c) = &key {
                         if c.as_str().eq_ignore_ascii_case("t") {
                             return Some(Message::NewWorkspace);
+                        }
+                        if c.as_str().eq_ignore_ascii_case("n") {
+                            return Some(Message::NewPane);
+                        }
+                    }
+                    if let keyboard::Key::Named(named) = &key {
+                        match named {
+                            keyboard::key::Named::ArrowLeft =>
+                                return Some(Message::FocusPaneLeft),
+                            keyboard::key::Named::ArrowRight =>
+                                return Some(Message::FocusPaneRight),
+                            _ => {}
                         }
                     }
                 }
