@@ -9,9 +9,8 @@ use crate::message::Message;
 use crate::pane::Pane;
 use crate::style::FG_MUTED;
 
-/// Render the paper strip. Uses FillPortion for side-by-side layout.
-/// Scrollable doesn't work due to iced_term rendering issue inside
-/// translated/clipped containers (separate from the Size::ZERO bug).
+/// Render the paper strip with FillPortion layout.
+/// Shows focused pane + adjacent panes side by side.
 pub fn view_strip<'a>(
     strip: &PaperStrip, panes: &'a HashMap<PaneId, Pane>,
 ) -> Element<'a, Message> {
@@ -39,7 +38,6 @@ pub fn view_strip<'a>(
     row(elements).spacing(0).width(Length::Fill).height(Length::Fill).into()
 }
 
-/// Show focused pane + up to one on each side.
 fn visible_range(focus: usize, count: usize) -> Vec<usize> {
     let mut result = Vec::new();
     if focus > 0 {
@@ -58,7 +56,6 @@ fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
     } else {
         Color::from_rgb(0.15, 0.15, 0.15)
     };
-    let border_width = if is_focused { 2.0 } else { 1.0 };
 
     let term_view = container(
         iced_term::TerminalView::show(&pane.terminal).map(Message::TermEvent),
@@ -68,7 +65,7 @@ fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
     .style(move |_| container::Style {
         border: iced::Border {
             color: border_color,
-            width: border_width,
+            width: if is_focused { 2.0 } else { 1.0 },
             radius: 0.0.into(),
         },
         ..Default::default()

@@ -21,11 +21,12 @@ Tracking issues discovered during paper WM implementation.
 
 ### Paper WM Core
 
-- [ ] **BLOCKER: iced_term doesn't render inside horizontal scrollable** -- TWO separate issues found:
-  1. iced_term passes Size::ZERO as intrinsic size in layout() (fix ready in local fork, PR pending to Harzu/iced_term)
-  2. Even with correct layout sizes, TerminalView draw() produces nothing inside scrollable -- likely a rendering/clipping issue with scrollable's viewport translation. Layout debug shows correct dimensions but terminals stay blank.
-  - iced's scrollable behavior (compression for Fill children) is CORRECT by design, not a bug (closed iced-rs/iced#3299)
-  - Current workaround: FillPortion layout showing focused + adjacent panes (no scrollable)
+- [ ] **BLOCKER: iced_term doesn't render inside horizontal scrollable** -- see docs/iced-term-scrollable-investigation.md for full analysis. Three issues found:
+  1. iced_term layout() uses Size::ZERO intrinsic (fix known but insufficient alone)
+  2. iced_term draw() uses absolute coords in a local frame (Canvas pattern fix attempted but didn't work)
+  3. Deeper issue: likely cache invalidation, resize timing, or geometry/layer composition problem
+  - iced's scrollable compression is CORRECT by design (closed iced-rs/iced#3299)
+  - Workaround: FillPortion layout with focused + adjacent panes (works, no scrollable needed)
 - [ ] All panes are full viewport width - no configurable widths yet
 - [ ] No smooth scroll animation
 - [ ] No side-by-side pane view (blocked by scrollable issue above)
