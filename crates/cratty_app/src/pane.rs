@@ -1,5 +1,4 @@
 use cratty_core::PaneId;
-use iced::Color;
 
 /// A terminal pane -- wraps iced_term::Terminal with display metadata.
 pub struct Pane {
@@ -8,7 +7,6 @@ pub struct Pane {
     pub terminal: iced_term::Terminal,
     pub title: String,
     pub custom_title: Option<String>,
-    pub color: Option<Color>,
 }
 
 impl Pane {
@@ -19,7 +17,6 @@ impl Pane {
             terminal,
             title: "Terminal".into(),
             custom_title: None,
-            color: None,
         }
     }
 

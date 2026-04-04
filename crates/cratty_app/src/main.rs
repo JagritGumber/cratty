@@ -2,14 +2,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use iced::keyboard;
-use iced::widget::{column, container, mouse_area, stack, Space};
+use iced::widget::column;
 use iced::window;
 use iced::{event, Color, Element, Length, Subscription, Task, Theme};
 
 use cratty_core::{IdGen, PaneId, Workspace, WorkspaceId};
 
 mod home;
-mod menu;
 mod message;
 mod pane;
 mod sidebar;
@@ -19,9 +18,8 @@ mod terminal;
 mod titlebar;
 mod widgets;
 
-use message::{Message, RenameState};
+use message::Message;
 use pane::Pane;
-use style::*;
 use widgets::PHOSPHOR_BOLD_BYTES;
 
 fn main() -> iced::Result {
@@ -50,9 +48,6 @@ struct Cratty {
     ws_colors: HashMap<WorkspaceId, Color>,
     id_gen: IdGen,
     last_size: Option<iced::Size>,
-    renaming: Option<RenameState>,
-    tab_menu_open: Option<WorkspaceId>,
-    color_submenu_open: bool,
 }
 
 fn with_window<F, T>(f: F) -> Task<T>
@@ -72,9 +67,6 @@ impl Cratty {
             ws_colors: HashMap::new(),
             id_gen: IdGen::new(),
             last_size: None,
-            renaming: None,
-            tab_menu_open: None,
-            color_submenu_open: false,
         }, Task::none())
     }
 
@@ -124,10 +116,6 @@ impl Cratty {
             self.panes.remove(pane_id);
         }
         self.ws_colors.remove(&ws.id);
-        self.dismiss_menu();
-        if let Some(r) = &self.renaming {
-            if r.workspace_id == ws.id { self.renaming = None; }
-        }
         if self.workspaces.is_empty() {
             return Task::none();
         }
@@ -163,7 +151,12 @@ impl Cratty {
         for ws in &mut self.workspaces {
             ws.strip.remove(pid);
         }
-        // Remove empty workspaces
+        // Clean up state for empty workspaces before removing them
+        let empty_ids: Vec<WorkspaceId> = self.workspaces.iter()
+            .filter(|ws| ws.is_empty()).map(|ws| ws.id).collect();
+        for id in &empty_ids {
+            self.ws_colors.remove(id);
+        }
         self.workspaces.retain(|ws| !ws.is_empty());
         if self.active_ws >= self.workspaces.len() && !self.workspaces.is_empty() {
             self.active_ws = self.workspaces.len() - 1;
@@ -173,11 +166,6 @@ impl Cratty {
 
     fn scroll_to_focused_pane(&self) -> Task<Message> {
         self.focus_active_terminal()
-    }
-
-    fn dismiss_menu(&mut self) {
-        self.tab_menu_open = None;
-        self.color_submenu_open = false;
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -191,32 +179,11 @@ impl Cratty {
                     .map(|p| p.terminal.handle(iced_term::Command::ProxyToBackend(cmd)));
                 match action {
                     Some(iced_term::actions::Action::Shutdown) => {
-                        // Find and remove the pane, close workspace if empty
                         if let Some(pid) = self.panes.values()
                             .find(|p| p.term_id == term_id).map(|p| p.id)
                         {
-                            self.panes.remove(&pid);
-                            for ws in &mut self.workspaces {
-                                ws.strip.remove(pid);
-                            }
-                            // Remove empty workspaces
-                            if let Some(idx) = self.workspaces.iter()
-                                .position(|ws| ws.is_empty())
-                            {
-                                let ws = self.workspaces.remove(idx);
-                                self.ws_colors.remove(&ws.id);
-                                self.dismiss_menu();
-                                if let Some(r) = &self.renaming {
-                                    if r.workspace_id == ws.id { self.renaming = None; }
-                                }
-                                if self.active_ws >= self.workspaces.len()
-                                    && !self.workspaces.is_empty()
-                                {
-                                    self.active_ws = self.workspaces.len() - 1;
-                                }
-                            }
+                            return self.remove_pane(pid);
                         }
-                        return self.focus_active_terminal();
                     }
                     Some(iced_term::actions::Action::ChangeTitle(title)) => {
                         if let Some(p) = self.panes.values_mut()
@@ -229,31 +196,14 @@ impl Cratty {
                 }
                 Task::none()
             }
-            Message::NewWorkspace => {
-                self.dismiss_menu();
-                self.create_workspace(None)
-            }
-            Message::DuplicateWorkspace(idx) => {
-                self.dismiss_menu();
-                let cwd = self.workspaces.get(idx)
-                    .and_then(|ws| ws.focused_pane())
-                    .and_then(|pid| self.panes.get(&pid))
-                    .and_then(|p| terminal::extract_cwd(&p.title));
-                self.create_workspace(cwd)
-            }
+            Message::NewWorkspace => self.create_workspace(None),
             Message::CloseWorkspace(idx) => self.close_workspace(idx),
             Message::SwitchWorkspace(idx) => {
-                if self.renaming.is_some() || idx >= self.workspaces.len() {
-                    return Task::none();
-                }
-                self.dismiss_menu();
+                if idx >= self.workspaces.len() { return Task::none(); }
                 self.active_ws = idx;
                 self.focus_active_terminal()
             }
-            Message::NewPane => {
-                self.dismiss_menu();
-                self.add_pane_to_active_workspace(None)
-            }
+            Message::NewPane => self.add_pane_to_active_workspace(None),
             Message::ClosePane(pid) => self.remove_pane(pid),
             Message::FocusPaneLeft => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
@@ -271,58 +221,7 @@ impl Cratty {
                 }
                 Task::none()
             }
-            Message::ToggleTabMenu(ws_id) => {
-                if self.tab_menu_open == Some(ws_id) {
-                    self.dismiss_menu();
-                } else {
-                    self.dismiss_menu();
-                    self.tab_menu_open = Some(ws_id);
-                }
-                Task::none()
-            }
-            Message::CloseTabMenu => { self.dismiss_menu(); Task::none() }
-            Message::StartRename(idx) => {
-                self.dismiss_menu();
-                if let Some(ws) = self.workspaces.get(idx) {
-                    self.renaming = Some(RenameState {
-                        workspace_id: ws.id,
-                        input: ws.name.clone(),
-                    });
-                    iced::widget::operation::focus_next()
-                } else { Task::none() }
-            }
-            Message::RenameInput(val) => {
-                if let Some(s) = &mut self.renaming { s.input = val; }
-                Task::none()
-            }
-            Message::ConfirmRename => {
-                if let Some(state) = self.renaming.take() {
-                    if let Some(ws) = self.workspaces.iter_mut()
-                        .find(|w| w.id == state.workspace_id)
-                    {
-                        let trimmed = state.input.trim();
-                        if !trimmed.is_empty() { ws.name = trimmed.into(); }
-                    }
-                }
-                self.focus_active_terminal()
-            }
-            Message::SetWorkspaceColor(ws_id, color) => {
-                match color {
-                    Some(c) => { self.ws_colors.insert(ws_id, c); }
-                    None => { self.ws_colors.remove(&ws_id); }
-                }
-                self.dismiss_menu();
-                Task::none()
-            }
-            Message::OpenColorSubmenu => { self.color_submenu_open = true; Task::none() }
-            Message::EscapePressed => {
-                if self.renaming.is_some() {
-                    self.renaming = None;
-                    return self.focus_active_terminal();
-                }
-                self.dismiss_menu();
-                Task::none()
-            }
+            Message::EscapePressed => Task::none(),
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
