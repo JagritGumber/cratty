@@ -9,8 +9,9 @@ use crate::message::Message;
 use crate::pane::Pane;
 use crate::style::FG_MUTED;
 
-/// Render the paper strip. Shows focused pane and adjacent panes using
-/// FillPortion layout (no scrollable -- iced_term can't render in one).
+/// Render the paper strip. Uses FillPortion for side-by-side layout.
+/// Scrollable doesn't work due to iced_term rendering issue inside
+/// translated/clipped containers (separate from the Size::ZERO bug).
 pub fn view_strip<'a>(
     strip: &PaperStrip, panes: &'a HashMap<PaneId, Pane>,
 ) -> Element<'a, Message> {
@@ -22,14 +23,6 @@ pub fn view_strip<'a>(
             .width(Length::Fill).height(Length::Fill).into();
     }
 
-    // Single pane: fill the whole area
-    if count == 1 {
-        if let Some(pane) = strip.panes.first().and_then(|pid| panes.get(pid)) {
-            return render_single_pane(pane);
-        }
-    }
-
-    // Multiple panes: show focused + adjacent using FillPortion
     let mut elements: Vec<Element<Message>> = Vec::new();
     let visible = visible_range(focus, count);
 
@@ -39,15 +32,14 @@ pub fn view_strip<'a>(
         }
         let pid = strip.panes[*idx];
         if let Some(pane) = panes.get(&pid) {
-            let is_focused = *idx == focus;
-            elements.push(render_pane(pane, is_focused));
+            elements.push(render_pane(pane, *idx == focus));
         }
     }
 
     row(elements).spacing(0).width(Length::Fill).height(Length::Fill).into()
 }
 
-/// Which pane indices to show. Focused pane + up to one on each side.
+/// Show focused pane + up to one on each side.
 fn visible_range(focus: usize, count: usize) -> Vec<usize> {
     let mut result = Vec::new();
     if focus > 0 {
@@ -58,21 +50,6 @@ fn visible_range(focus: usize, count: usize) -> Vec<usize> {
         result.push(focus + 1);
     }
     result
-}
-
-fn render_single_pane(pane: &Pane) -> Element<'_, Message> {
-    iced::widget::keyed_column(std::iter::once((
-        pane.term_id,
-        container(
-            iced_term::TerminalView::show(&pane.terminal).map(Message::TermEvent),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into(),
-    )))
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .into()
 }
 
 fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
@@ -100,7 +77,6 @@ fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
     if is_focused {
         term_view.into()
     } else {
-        // Dim overlay on unfocused panes
         iced::widget::stack![
             term_view,
             container(Space::new())
