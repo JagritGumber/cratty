@@ -111,15 +111,19 @@ impl Cratty {
         if idx >= self.workspaces.len() {
             return Task::none();
         }
+        let active_id = self.workspaces.get(self.active_ws).map(|w| w.id);
         let ws = self.workspaces.remove(idx);
         for pane_id in &ws.strip.panes {
             self.panes.remove(pane_id);
         }
         self.ws_colors.remove(&ws.id);
         if self.workspaces.is_empty() {
+            self.active_ws = 0;
             return Task::none();
         }
-        self.active_ws = self.active_ws.min(self.workspaces.len() - 1);
+        self.active_ws = active_id
+            .and_then(|id| self.workspaces.iter().position(|w| w.id == id))
+            .unwrap_or(self.active_ws.min(self.workspaces.len() - 1));
         self.focus_active_terminal()
     }
 
@@ -140,7 +144,7 @@ impl Cratty {
                 let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
                 self.panes.insert(pane_id, Pane::new(pane_id, term_id, term));
                 ws.strip.push(pane_id);
-                Task::batch([focus, self.scroll_to_focused_pane()])
+                Task::batch([focus, self.focus_active_terminal()])
             }
             Err(_) => Task::none(),
         }
@@ -148,23 +152,21 @@ impl Cratty {
 
     fn remove_pane(&mut self, pid: PaneId) -> Task<Message> {
         self.panes.remove(&pid);
+        let active_id = self.workspaces.get(self.active_ws).map(|w| w.id);
         for ws in &mut self.workspaces {
             ws.strip.remove(pid);
         }
-        // Clean up state for empty workspaces before removing them
         let empty_ids: Vec<WorkspaceId> = self.workspaces.iter()
             .filter(|ws| ws.is_empty()).map(|ws| ws.id).collect();
         for id in &empty_ids {
             self.ws_colors.remove(id);
         }
         self.workspaces.retain(|ws| !ws.is_empty());
-        if self.active_ws >= self.workspaces.len() && !self.workspaces.is_empty() {
-            self.active_ws = self.workspaces.len() - 1;
-        }
-        self.focus_active_terminal()
-    }
-
-    fn scroll_to_focused_pane(&self) -> Task<Message> {
+        self.active_ws = active_id
+            .and_then(|id| self.workspaces.iter().position(|w| w.id == id))
+            .unwrap_or(self.active_ws.min(
+                self.workspaces.len().saturating_sub(1),
+            ));
         self.focus_active_terminal()
     }
 
@@ -208,7 +210,7 @@ impl Cratty {
             Message::FocusPaneLeft => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
                     if ws.strip.focus_left() {
-                        return self.scroll_to_focused_pane();
+                        return self.focus_active_terminal();
                     }
                 }
                 Task::none()
@@ -216,7 +218,7 @@ impl Cratty {
             Message::FocusPaneRight => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
                     if ws.strip.focus_right() {
-                        return self.scroll_to_focused_pane();
+                        return self.focus_active_terminal();
                     }
                 }
                 Task::none()
