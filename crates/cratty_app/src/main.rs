@@ -14,6 +14,7 @@ mod pane;
 mod sidebar;
 mod strip_view;
 mod style;
+mod term_backend;
 mod terminal;
 mod titlebar;
 mod widgets;
