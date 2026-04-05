@@ -32,5 +32,10 @@ dirs = "6"
 notify = "7"
 
 # GUI
-iced = { version = "0.14", features = ["canvas", "advanced", "lazy"] }
-iced_term = { path = "D:/Jagrit/Contributions/iced_term" }
+iced = { version = "0.14", features = ["canvas", "advanced", "lazy", "tokio"] }
+iced_graphics = "0.14"
+iced_core = "0.14"
+
+# Terminal backend
+alacritty_terminal = "0.25.1"
+tokio = { version = "1", features = ["full"] }

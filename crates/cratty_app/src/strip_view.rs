@@ -58,7 +58,7 @@ fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
     };
 
     let term_view = container(
-        iced_term::TerminalView::show(&pane.terminal).map(Message::TermEvent),
+        crate::term_widget::view(&pane.backend),
     )
     .width(Length::FillPortion(1))
     .height(Length::Fill)

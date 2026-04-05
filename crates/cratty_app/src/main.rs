@@ -14,12 +14,16 @@ mod pane;
 mod sidebar;
 mod strip_view;
 mod style;
+mod term_backend;
+mod term_canvas;
+mod term_widget;
 mod terminal;
 mod titlebar;
 mod widgets;
 
 use message::Message;
 use pane::Pane;
+use term_backend::TermBackend;
 use widgets::PHOSPHOR_BOLD_BYTES;
 
 fn main() -> iced::Result {
@@ -47,7 +51,6 @@ struct Cratty {
     panes: HashMap<PaneId, Pane>,
     ws_colors: HashMap<WorkspaceId, Color>,
     id_gen: IdGen,
-    last_size: Option<iced::Size>,
 }
 
 fn with_window<F, T>(f: F) -> Task<T>
@@ -66,45 +69,46 @@ impl Cratty {
             panes: HashMap::new(),
             ws_colors: HashMap::new(),
             id_gen: IdGen::new(),
-            last_size: None,
         }, Task::none())
     }
 
     fn create_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
         let ws_id = self.id_gen.next_workspace();
         let pane_id = self.id_gen.next_pane();
-        let term_id = pane_id.0;
+        let (shell, args) = terminal::default_shell();
 
-        match terminal::new_terminal(term_id, cwd) {
-            Ok(mut term) => {
-                if let Some(size) = self.last_size {
-                    term.handle(iced_term::Command::ProxyToBackend(
-                        iced_term::BackendCommand::Resize(Some(size), None),
-                    ));
-                }
-                let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
-                self.panes.insert(pane_id, Pane::new(pane_id, term_id, term));
-
+        match TermBackend::new(shell, args, cwd, 80, 24, 8, 16) {
+            Ok(backend) => {
+                self.panes.insert(pane_id, Pane::new(pane_id, backend));
                 let mut ws = Workspace::new(ws_id, format!("Terminal {}", ws_id.0));
                 ws.strip.push(pane_id);
                 self.workspaces.push(ws);
                 self.active_ws = self.workspaces.len() - 1;
-                focus
+                Task::none()
             }
-            Err(_) => Task::none(),
+            Err(e) => {
+                tracing::error!("Failed to create terminal: {e}");
+                Task::none()
+            }
         }
     }
 
-    fn focused_pane(&self) -> Option<&Pane> {
-        let ws = self.workspaces.get(self.active_ws)?;
-        let pane_id = ws.focused_pane()?;
-        self.panes.get(&pane_id)
-    }
+    fn add_pane_to_active_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
+        let ws = match self.workspaces.get_mut(self.active_ws) {
+            Some(ws) => ws,
+            None => return self.create_workspace(cwd),
+        };
+        let pane_id = self.id_gen.next_pane();
+        let (shell, args) = terminal::default_shell();
 
-    fn focus_active_terminal(&self) -> Task<Message> {
-        self.focused_pane().map_or(Task::none(), |pane| {
-            iced_term::TerminalView::focus::<Message>(pane.terminal.widget_id().clone())
-        })
+        match TermBackend::new(shell, args, cwd, 80, 24, 8, 16) {
+            Ok(backend) => {
+                self.panes.insert(pane_id, Pane::new(pane_id, backend));
+                ws.strip.push(pane_id);
+                Task::none()
+            }
+            Err(_) => Task::none(),
+        }
     }
 
     fn close_workspace(&mut self, idx: usize) -> Task<Message> {
@@ -124,30 +128,7 @@ impl Cratty {
         self.active_ws = active_id
             .and_then(|id| self.workspaces.iter().position(|w| w.id == id))
             .unwrap_or(self.active_ws.min(self.workspaces.len() - 1));
-        self.focus_active_terminal()
-    }
-
-    fn add_pane_to_active_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
-        let ws = match self.workspaces.get_mut(self.active_ws) {
-            Some(ws) => ws,
-            None => return self.create_workspace(cwd),
-        };
-        let pane_id = self.id_gen.next_pane();
-        let term_id = pane_id.0;
-        match terminal::new_terminal(term_id, cwd) {
-            Ok(mut term) => {
-                if let Some(size) = self.last_size {
-                    term.handle(iced_term::Command::ProxyToBackend(
-                        iced_term::BackendCommand::Resize(Some(size), None),
-                    ));
-                }
-                let focus = iced_term::TerminalView::focus::<Message>(term.widget_id().clone());
-                self.panes.insert(pane_id, Pane::new(pane_id, term_id, term));
-                ws.strip.push(pane_id);
-                focus
-            }
-            Err(_) => Task::none(),
-        }
+        Task::none()
     }
 
     fn remove_pane(&mut self, pid: PaneId) -> Task<Message> {
@@ -167,63 +148,69 @@ impl Cratty {
             .unwrap_or(self.active_ws.min(
                 self.workspaces.len().saturating_sub(1),
             ));
-        self.focus_active_terminal()
+        Task::none()
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
-        match message {
-            Message::TermEvent(iced_term::Event::BackendCall(term_id, cmd)) => {
-                if let iced_term::BackendCommand::Resize(Some(layout), Some(_)) = &cmd {
-                    self.last_size = Some(*layout);
-                }
-                let action = self.panes.values_mut()
-                    .find(|p| p.term_id == term_id)
-                    .map(|p| p.terminal.handle(iced_term::Command::ProxyToBackend(cmd)));
-                match action {
-                    Some(iced_term::actions::Action::Shutdown) => {
-                        if let Some(pid) = self.panes.values()
-                            .find(|p| p.term_id == term_id).map(|p| p.id)
-                        {
-                            return self.remove_pane(pid);
+    fn process_terminal_events(&mut self) {
+        let pane_ids: Vec<PaneId> = self.panes.keys().copied().collect();
+        for pid in pane_ids {
+            let events = if let Some(pane) = self.panes.get(&pid) {
+                pane.backend.drain_events()
+            } else {
+                continue;
+            };
+            for ev in events {
+                match ev {
+                    alacritty_terminal::event::Event::Title(title) => {
+                        if let Some(pane) = self.panes.get_mut(&pid) {
+                            pane.title = title;
                         }
                     }
-                    Some(iced_term::actions::Action::ChangeTitle(title)) => {
-                        if let Some(p) = self.panes.values_mut()
-                            .find(|p| p.term_id == term_id)
-                        {
-                            p.title = title;
+                    alacritty_terminal::event::Event::Exit => {
+                        self.panes.remove(&pid);
+                        for ws in &mut self.workspaces {
+                            ws.strip.remove(pid);
                         }
                     }
                     _ => {}
                 }
-                Task::none()
             }
+        }
+        // Clean up empty workspaces
+        self.workspaces.retain(|ws| !ws.is_empty());
+        if self.active_ws >= self.workspaces.len() && !self.workspaces.is_empty() {
+            self.active_ws = self.workspaces.len() - 1;
+        }
+    }
+
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
             Message::NewWorkspace => self.create_workspace(None),
             Message::CloseWorkspace(idx) => self.close_workspace(idx),
             Message::SwitchWorkspace(idx) => {
                 if idx >= self.workspaces.len() { return Task::none(); }
                 self.active_ws = idx;
-                self.focus_active_terminal()
+                Task::none()
             }
             Message::NewPane => self.add_pane_to_active_workspace(None),
             Message::ClosePane(pid) => self.remove_pane(pid),
             Message::FocusPaneLeft => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    if ws.strip.focus_left() {
-                        return self.focus_active_terminal();
-                    }
+                    ws.strip.focus_left();
                 }
                 Task::none()
             }
             Message::FocusPaneRight => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    if ws.strip.focus_right() {
-                        return self.focus_active_terminal();
-                    }
+                    ws.strip.focus_right();
                 }
                 Task::none()
             }
             Message::EscapePressed => Task::none(),
+            Message::Tick => {
+                self.process_terminal_events();
+                Task::none()
+            }
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
@@ -260,8 +247,6 @@ impl Cratty {
     fn theme(&self) -> Theme { Theme::Dark }
 
     fn subscription(&self) -> Subscription<Message> {
-        let term_subs = self.panes.values()
-            .map(|p| p.terminal.subscription().map(Message::TermEvent));
         let key_sub = event::listen_with(|evt, _status, _window| {
             if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
                 key, modifiers, ..
@@ -291,6 +276,8 @@ impl Cratty {
             }
             None
         });
-        Subscription::batch(term_subs.chain(std::iter::once(key_sub)))
+        let tick_sub = iced::time::every(std::time::Duration::from_millis(16))
+            .map(|_| Message::Tick);
+        Subscription::batch([key_sub, tick_sub])
     }
 }
