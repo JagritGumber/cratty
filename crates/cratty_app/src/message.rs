@@ -1,4 +1,4 @@
-use cratty_core::PaneId;
+use cratty_core::{PaneId, WorkspaceId};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -9,6 +9,13 @@ pub enum Message {
     ClosePane(PaneId),
     FocusPaneLeft,
     FocusPaneRight,
+    ToggleSidebar,
+    RenameWorkspace(WorkspaceId),
+    RenameInput(String),
+    RenameSubmit,
+    SetWorkspaceColor(WorkspaceId, iced::Color),
+    ShowWsMenu(usize),
+    HideWsMenu,
     DragWindow,
     Minimize,
     Maximize,

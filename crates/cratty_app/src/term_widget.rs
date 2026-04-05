@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use alacritty_terminal::event::Notify;
 use alacritty_terminal::event_loop::Notifier;
@@ -16,9 +16,7 @@ use crate::term_canvas;
 struct TermProgram {
     term: Arc<FairMutex<Term<EventProxy>>>,
     notifier: Notifier,
-    cell_w: f32,
-    cell_h: f32,
-    font_size: f32,
+    pending_resize: Arc<Mutex<Option<(u16, u16)>>>,
 }
 
 impl canvas::Program<Message> for TermProgram {
@@ -28,7 +26,14 @@ impl canvas::Program<Message> for TermProgram {
         &self, _state: &mut (), event: &Event,
         _bounds: Rectangle, _cursor: iced::mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
-        if let Event::Keyboard(iced::keyboard::Event::KeyPressed { text, .. }) = event {
+        if let Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            text, modifiers, ..
+        }) = event
+        {
+            // Don't forward Ctrl+Shift combos -- those are app shortcuts
+            if modifiers.control() && modifiers.shift() {
+                return None;
+            }
             if let Some(txt) = text {
                 let bytes = txt.as_bytes();
                 if !bytes.is_empty() {
@@ -44,10 +49,7 @@ impl canvas::Program<Message> for TermProgram {
         &self, _state: &(), renderer: &iced::Renderer,
         _theme: &iced::Theme, bounds: Rectangle, _cursor: iced::mouse::Cursor,
     ) -> Vec<Geometry> {
-        term_canvas::draw_grid(
-            &self.term, renderer, bounds,
-            self.cell_w, self.cell_h, self.font_size,
-        )
+        term_canvas::draw_grid(&self.term, renderer, bounds, &self.pending_resize)
     }
 }
 
@@ -56,9 +58,7 @@ pub fn view(backend: &TermBackend) -> Element<'_, Message> {
     let program = TermProgram {
         term: backend.term.clone(),
         notifier: Notifier(backend.sender.clone()),
-        cell_w: 8.2,
-        cell_h: 18.2,
-        font_size: 14.0,
+        pending_resize: backend.pending_resize.clone(),
     };
 
     Canvas::new(program)

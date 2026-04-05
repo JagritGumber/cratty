@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use iced::widget::{container, row, Space};
+use iced::widget::{container, row, text, Space};
 use iced::{Color, Element, Length};
 
 use cratty_core::{PaneId, PaperStrip};
@@ -9,28 +9,20 @@ use crate::message::Message;
 use crate::pane::Pane;
 use crate::style::FG_MUTED;
 
-/// Render the paper strip with FillPortion layout.
-/// Shows focused pane + adjacent panes side by side.
+/// Render the paper strip: focused pane + adjacent panes side by side.
 pub fn view_strip<'a>(
     strip: &PaperStrip, panes: &'a HashMap<PaneId, Pane>,
 ) -> Element<'a, Message> {
-    let focus = strip.focus_idx;
-    let count = strip.panes.len();
-
-    if count == 0 {
-        return container(Space::new())
-            .width(Length::Fill).height(Length::Fill).into();
+    if strip.panes.is_empty() {
+        return container(Space::new()).width(Length::Fill).height(Length::Fill).into();
     }
 
+    let focus = strip.focus_idx;
     let mut elements: Vec<Element<Message>> = Vec::new();
-    let visible = visible_range(focus, count);
 
-    for (i, idx) in visible.iter().enumerate() {
-        if i > 0 {
-            elements.push(pane_divider());
-        }
-        let pid = strip.panes[*idx];
-        if let Some(pane) = panes.get(&pid) {
+    for (i, idx) in visible_range(focus, strip.panes.len()).iter().enumerate() {
+        if i > 0 { elements.push(pane_divider()); }
+        if let Some(pane) = panes.get(&strip.panes[*idx]) {
             elements.push(render_pane(pane, *idx == focus));
         }
     }
@@ -39,15 +31,11 @@ pub fn view_strip<'a>(
 }
 
 fn visible_range(focus: usize, count: usize) -> Vec<usize> {
-    let mut result = Vec::new();
-    if focus > 0 {
-        result.push(focus - 1);
-    }
-    result.push(focus);
-    if focus + 1 < count {
-        result.push(focus + 1);
-    }
-    result
+    let mut r = Vec::new();
+    if focus > 0 { r.push(focus - 1); }
+    r.push(focus);
+    if focus + 1 < count { r.push(focus + 1); }
+    r
 }
 
 fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
@@ -56,46 +44,42 @@ fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
     } else {
         Color::from_rgb(0.15, 0.15, 0.15)
     };
+    let border_w = if is_focused { 2.0 } else { 1.0 };
 
-    let term_view = container(
-        crate::term_widget::view(&pane.backend),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fill)
-    .style(move |_| container::Style {
-        border: iced::Border {
-            color: border_color,
-            width: if is_focused { 2.0 } else { 1.0 },
-            radius: 0.0.into(),
-        },
-        ..Default::default()
-    });
+    let inner: Element<Message> = match &pane.backend {
+        Some(backend) => crate::term_widget::view(backend),
+        None => container(text("Loading...").size(12).color(crate::style::FG_DIM))
+            .center(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(iced::Background::Color(crate::style::BG_TERMINAL)),
+                ..Default::default()
+            })
+            .into(),
+    };
+    let term_view = container(inner)
+        .width(Length::FillPortion(1)).height(Length::Fill)
+        .style(move |_| container::Style {
+            border: iced::Border { color: border_color, width: border_w, radius: 0.0.into() },
+            ..Default::default()
+        });
 
     if is_focused {
         term_view.into()
     } else {
         iced::widget::stack![
             term_view,
-            container(Space::new())
-                .width(Length::Fill)
-                .height(Length::Fill)
+            container(Space::new()).width(Length::Fill).height(Length::Fill)
                 .style(|_| container::Style {
-                    background: Some(iced::Background::Color(
-                        Color::from_rgba(0.0, 0.0, 0.0, 0.35),
-                    )),
+                    background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
                     ..Default::default()
                 }),
         ]
-        .width(Length::FillPortion(1))
-        .height(Length::Fill)
-        .into()
+        .width(Length::FillPortion(1)).height(Length::Fill).into()
     }
 }
 
 fn pane_divider() -> Element<'static, Message> {
-    container(Space::new())
-        .width(2)
-        .height(Length::Fill)
+    container(Space::new()).width(2).height(Length::Fill)
         .style(|_| container::Style {
             background: Some(iced::Background::Color(FG_MUTED)),
             ..Default::default()
