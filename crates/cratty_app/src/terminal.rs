@@ -1,12 +1,19 @@
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+static CACHED_SHELL: OnceLock<(String, Vec<String>)> = OnceLock::new();
 
 pub fn default_shell() -> (String, Vec<String>) {
+    CACHED_SHELL.get_or_init(detect_shell).clone()
+}
+
+fn detect_shell() -> (String, Vec<String>) {
     #[cfg(windows)]
     {
-        if which("pwsh.exe") {
-            ("pwsh.exe".into(), vec!["-NoLogo".into()])
-        } else if which("powershell.exe") {
+        if which("powershell.exe") {
             ("powershell.exe".into(), vec!["-NoLogo".into()])
+        } else if which("pwsh.exe") {
+            ("pwsh.exe".into(), vec!["-NoLogo".into()])
         } else {
             ("cmd.exe".into(), vec![])
         }
@@ -51,9 +58,6 @@ fn extract_embedded_path(title: &str) -> Option<String> {
 
 #[cfg(windows)]
 fn which(name: &str) -> bool {
-    std::process::Command::new("where")
-        .arg(name)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    path_var.split(';').any(|dir| Path::new(dir).join(name).exists())
 }

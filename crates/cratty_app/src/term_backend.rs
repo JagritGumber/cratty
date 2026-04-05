@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener, Notify, OnResize, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Notifier};
@@ -38,6 +38,7 @@ pub struct TermBackend {
     notifier: Notifier,
     pub event_rx: std::sync::mpsc::Receiver<TermEvent>,
     size: TermSize,
+    pub pending_resize: Arc<Mutex<Option<(u16, u16)>>>,
 }
 
 impl TermBackend {
@@ -74,7 +75,8 @@ impl TermBackend {
         let notifier = Notifier(sender.clone());
         let _join = event_loop.spawn();
 
-        Ok(Self { term, sender, notifier, event_rx, size })
+        let pending_resize = Arc::new(Mutex::new(None));
+        Ok(Self { term, sender, notifier, event_rx, size, pending_resize })
     }
 
     pub fn write(&self, data: &[u8]) {
@@ -89,6 +91,15 @@ impl TermBackend {
         };
         let _ = self.notifier.on_resize(window_size);
         self.term.lock().resize(self.size);
+    }
+
+    pub fn apply_pending_resize(&mut self, cell_w: u16, cell_h: u16) {
+        let pending = self.pending_resize.lock().unwrap().take();
+        if let Some((cols, rows)) = pending {
+            if cols != self.size.cols || rows != self.size.rows {
+                self.resize(cols, rows, cell_w, cell_h);
+            }
+        }
     }
 
     pub fn drain_events(&self) -> Vec<TermEvent> {
