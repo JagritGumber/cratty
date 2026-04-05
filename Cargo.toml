@@ -32,7 +32,7 @@ dirs = "6"
 notify = "7"
 
 # GUI
-iced = { version = "0.14", features = ["canvas", "advanced", "lazy"] }
+iced = { version = "0.14", features = ["canvas", "advanced", "lazy", "tokio"] }
 iced_graphics = "0.14"
 iced_core = "0.14"
 

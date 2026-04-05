@@ -2,7 +2,6 @@ use cratty_core::PaneId;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    TermEvent(iced_term::Event),
     NewWorkspace,
     CloseWorkspace(usize),
     SwitchWorkspace(usize),
@@ -15,4 +14,5 @@ pub enum Message {
     Maximize,
     CloseWindow,
     EscapePressed,
+    Tick,
 }

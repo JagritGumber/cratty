@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use alacritty_terminal::event::{Event as TermEvent, EventListener, WindowSize};
-use alacritty_terminal::event_loop::{EventLoop, Notifier};
+use alacritty_terminal::event::{Event as TermEvent, EventListener, Notify, OnResize, WindowSize};
+use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Notifier};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::{self, Term};
@@ -34,7 +34,8 @@ impl Dimensions for TermSize {
 /// Wraps alacritty_terminal PTY + terminal emulator.
 pub struct TermBackend {
     pub term: Arc<FairMutex<Term<EventProxy>>>,
-    pub notifier: Notifier,
+    pub sender: EventLoopSender,
+    notifier: Notifier,
     pub event_rx: std::sync::mpsc::Receiver<TermEvent>,
     size: TermSize,
 }
@@ -69,10 +70,11 @@ impl TermBackend {
         let event_loop = EventLoop::new(
             term.clone(), event_proxy, pty, false, false,
         )?;
-        let notifier = Notifier(event_loop.channel());
+        let sender = event_loop.channel();
+        let notifier = Notifier(sender.clone());
         let _join = event_loop.spawn();
 
-        Ok(Self { term, notifier, event_rx, size })
+        Ok(Self { term, sender, notifier, event_rx, size })
     }
 
     pub fn write(&self, data: &[u8]) {
