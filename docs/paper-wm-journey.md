@@ -65,12 +65,35 @@ Phase 1: Core data structures (PaperStrip, ViewOffset with ease-out animation, F
 
 Phase 2: Replaced Vec<Tab> with Vec<Workspace> + HashMap<PaneId, Pane>. Same UX, new data model.
 
-Phase 3: Paper strip rendering + sidebar. Hit the scrollable rendering wall.
+Phase 3: Paper strip rendering + sidebar. Hit the scrollable rendering wall with iced_term.
+
+Phase 4: Deep investigation of iced_term rendering bugs. Found three issues: Size::ZERO intrinsic, absolute coords in local frame, viewport width feedback loop. Confirmed iced's scrollable compression is correct by design (closed iced-rs/iced#3299). FillPortion workaround working.
+
+Phase 5: Dropped iced_term entirely. Built our own Canvas-based terminal renderer using alacritty_terminal directly. Three new files: term_backend.rs (PTY wrapper), term_canvas.rs (grid renderer), term_widget.rs (Canvas Program + keyboard). Canvas uses local coords + with_translation natively, which is the pattern iced's scrollable supports.
+
+## Architecture
+
+```
+alacritty_terminal (PTY + VT parsing, battle-tested)
+    |
+term_backend.rs (spawn, write, resize, event drain)
+    |
+term_canvas.rs (draw grid cells at local coords on Canvas)
+    |
+term_widget.rs (Canvas Program + keyboard input via Notifier)
+    |
+strip_view.rs (FillPortion layout, focused + adjacent panes)
+    |
+iced (layout, window management, scrollable)
+```
 
 ## What's Next
 
-- Solve the scrollable rendering problem (the real blocker)
+- Test Canvas terminal inside scrollable (should work -- Canvas is iced's own widget)
+- True paper WM clipping (each pane keeps its width, viewport clips overflow)
 - Configurable pane widths (proportion or fixed pixels)
 - Smooth scroll animation between panes (spring physics, inspired by Niri)
-- Sidebar collapse toggle for power users
+- Fix keyboard leak (Ctrl+Shift+N writes ^N to terminal)
+- Programmable terminal I/O for AI integration
+- Sidebar collapse toggle
 - Workspace context menus (rename, color, delete)

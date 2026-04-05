@@ -246,3 +246,48 @@ text_input("placeholder", &value)
 ```
 
 Text input consumes Escape internally (unfocuses itself). There is no `on_escape` callback.
+
+## iced::time::every requires tokio feature
+
+`iced::time::every()` is behind the `tokio` feature flag. Without it, the module exists but `every` is missing:
+
+```toml
+iced = { version = "0.14", features = ["canvas", "advanced", "lazy", "tokio"] }
+```
+
+## Canvas Geometry Coordinate System
+
+Canvas geometry uses LOCAL coordinates (0,0 based). iced positions the geometry at the widget's layout bounds via `with_translation`. This is critical for scrollable support.
+
+```rust
+// WRONG: absolute screen coordinates in the frame
+let x = layout.position().x + col * cell_w;  // breaks in scrollable
+
+// CORRECT: local coordinates, let iced handle positioning
+let x = col * cell_w;  // starts from 0,0
+```
+
+Frame size should be `layout.bounds().size()`, NOT `viewport.size()`. The viewport is the visible window, but the frame represents the widget's own dimensions.
+
+Reference: iced's own Canvas widget (`iced_widget/src/canvas.rs` lines 300-310) uses this pattern.
+
+## Scrollable Layout Compression
+
+iced's scrollable uses a "compression" system for the scroll axis:
+- Sets max to `f32::INFINITY` for the scroll direction
+- Sets `compression = true` for Fill children
+- `limits.resolve(Fill)` with compression returns `intrinsic_size`, not max
+
+This is CORRECT behavior. The scrollable needs to know content size. The fix for Fill widgets that render blank is to provide a meaningful intrinsic size, not `Size::ZERO`.
+
+## Terminal Resize Feedback Loop
+
+Never use terminal layout size (`last_size` from resize events) to calculate viewport width. This creates a death spiral:
+
+```
+terminal at 1000px -> vw = 1000 - sidebar = 800
+-> terminal resizes to 800 -> vw = 800 - sidebar = 600
+-> ... -> vw = 0, gray screen
+```
+
+Use the window size or container bounds instead.
