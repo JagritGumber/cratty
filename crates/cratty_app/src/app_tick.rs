@@ -17,11 +17,13 @@ impl Cratty {
                 Ok(Err(e)) => {
                     tracing::error!("Failed to create terminal: {e}");
                     self.panes.remove(&pending.pane_id);
+                    for ws in &mut self.workspaces { ws.strip.remove(pending.pane_id); }
                     false
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => true, // keep waiting
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.panes.remove(&pending.pane_id);
+                    for ws in &mut self.workspaces { ws.strip.remove(pending.pane_id); }
                     false
                 }
             }
@@ -57,6 +59,9 @@ impl Cratty {
                     _ => {}
                 }
             }
+        }
+        for ws in self.workspaces.iter().filter(|ws| ws.is_empty()) {
+            self.ws_colors.remove(&ws.id);
         }
         self.workspaces.retain(|ws| !ws.is_empty());
         if self.active_ws >= self.workspaces.len() && !self.workspaces.is_empty() {
