@@ -8,25 +8,11 @@ use cratty_core::{IdGen, PaneId, Workspace, WorkspaceId};
 
 use term_backend::TermBackend;
 
-mod app_actions;
-mod app_keys;
-mod app_tick;
-mod app_update;
-mod home;
-mod message;
-mod pane;
-mod sidebar;
-mod strip_view;
-mod style;
-mod term_backend;
-mod term_canvas;
-mod term_colors;
-mod term_widget;
-mod terminal;
-mod titlebar;
-mod widgets;
-mod ws_item;
-mod ws_menu;
+mod app_actions; mod app_keys; mod app_tick; mod app_update;
+mod home; mod message; mod pane; mod sidebar; mod strip_view;
+mod style; mod term_backend; mod term_canvas; mod term_colors;
+mod term_input; mod term_widget; mod terminal; mod titlebar; mod widgets;
+mod ws_item; mod ws_menu;
 
 use message::Message;
 use pane::Pane;
@@ -46,7 +32,6 @@ fn main() -> iced::Result {
         .run()
 }
 
-/// Pending PTY spawn -- workspace/pane created, backend arrives later.
 pub struct PendingBackend {
     pub pane_id: PaneId,
     pub rx: mpsc::Receiver<anyhow::Result<TermBackend>>,
@@ -63,6 +48,7 @@ pub struct Cratty {
     pub rename_text: String,
     pub ws_menu_idx: Option<usize>,
     pub pending_backends: Vec<PendingBackend>,
+    pub viewport_w: f32,
 }
 
 pub fn with_window<F, T>(f: F) -> Task<T>
@@ -80,7 +66,7 @@ impl Cratty {
             panes: HashMap::new(), ws_colors: HashMap::new(),
             id_gen: IdGen::new(), sidebar_collapsed: false,
             renaming_ws: None, rename_text: String::new(), ws_menu_idx: None,
-            pending_backends: vec![],
+            pending_backends: vec![], viewport_w: 1200.0,
         }, Task::none())
     }
 
@@ -88,7 +74,9 @@ impl Cratty {
         use iced::widget::row;
         let bar = titlebar::view_titlebar();
         let main_area: Element<Message> = match self.workspaces.get(self.active_ws) {
-            Some(ws) if !ws.is_empty() => strip_view::view_strip(&ws.strip, &self.panes),
+            Some(ws) if !ws.is_empty() => {
+                strip_view::view_strip(&ws.strip, &self.panes, self.viewport_w)
+            }
             _ => home::view_home(),
         };
 

@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 
+use iced::widget::{operation, scrollable};
 use iced::Task;
 
 use cratty_core::{PaneId, Workspace, WorkspaceId};
 
 use crate::message::Message;
 use crate::pane::Pane;
+use crate::strip_view::strip_scroll_id;
 use crate::style::{CELL_H, CELL_W};
 use crate::term_backend::TermBackend;
 use crate::terminal;
@@ -32,7 +34,7 @@ impl Cratty {
         self.workspaces.push(ws);
         self.active_ws = self.workspaces.len() - 1;
         self.spawn_backend(pane_id, cwd);
-        Task::none()
+        scroll_to_strip_start()
     }
 
     pub fn add_pane_to_active_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
@@ -43,8 +45,12 @@ impl Cratty {
         let pane_id = self.id_gen.next_pane();
         self.panes.insert(pane_id, Pane::new_loading(pane_id));
         ws.strip.push(pane_id);
+        let divider = 2.0;
+        let x: f32 = (0..ws.strip.focus_idx)
+            .map(|i| ws.strip.pane_width_at(i, self.viewport_w) + divider)
+            .sum();
         self.spawn_backend(pane_id, cwd);
-        Task::none()
+        operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
     }
 
     pub fn close_workspace(&mut self, idx: usize) -> Task<Message> {
@@ -76,4 +82,8 @@ impl Cratty {
             .unwrap_or(self.active_ws.min(self.workspaces.len().saturating_sub(1)));
         Task::none()
     }
+}
+
+fn scroll_to_strip_start() -> Task<Message> {
+    operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x: 0.0, y: 0.0 })
 }

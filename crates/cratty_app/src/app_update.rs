@@ -1,7 +1,9 @@
+use iced::widget::{operation, scrollable};
 use iced::window;
 use iced::Task;
 
 use crate::message::Message;
+use crate::strip_view::strip_scroll_id;
 use crate::{with_window, Cratty};
 
 impl Cratty {
@@ -16,19 +18,30 @@ impl Cratty {
             }
             Message::NewPane => self.add_pane_to_active_workspace(None),
             Message::ClosePane(pid) => self.remove_pane(pid),
-            Message::FocusPaneLeft => {
+            Message::FocusPaneLeft | Message::FocusPaneRight => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    ws.strip.focus_left();
-                    let idx = ws.strip.focus_idx as f32;
-                    ws.strip.viewport.animate_to(idx);
+                    let moved = match message {
+                        Message::FocusPaneLeft => ws.strip.focus_left(),
+                        _ => ws.strip.focus_right(),
+                    };
+                    if moved {
+                        ws.strip.viewport.animate_to(ws.strip.focus_idx as f32);
+                        return scroll_to_pane(&ws.strip, self.viewport_w);
+                    }
                 }
                 Task::none()
             }
-            Message::FocusPaneRight => {
+            Message::CyclePresetWidth => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    ws.strip.focus_right();
-                    let idx = ws.strip.focus_idx as f32;
-                    ws.strip.viewport.animate_to(idx);
+                    ws.strip.cycle_preset_width();
+                    return scroll_to_pane(&ws.strip, self.viewport_w);
+                }
+                Task::none()
+            }
+            Message::ToggleMaximizePane => {
+                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+                    ws.strip.toggle_maximize();
+                    return scroll_to_pane(&ws.strip, self.viewport_w);
                 }
                 Task::none()
             }
@@ -44,10 +57,7 @@ impl Cratty {
                 self.ws_menu_idx = None;
                 Task::none()
             }
-            Message::RenameInput(text) => {
-                self.rename_text = text;
-                Task::none()
-            }
+            Message::RenameInput(text) => { self.rename_text = text; Task::none() }
             Message::RenameSubmit => {
                 if let Some(ws_id) = self.renaming_ws.take() {
                     if let Some(ws) = self.workspaces.iter_mut().find(|w| w.id == ws_id) {
@@ -64,14 +74,8 @@ impl Cratty {
                 self.ws_menu_idx = None;
                 Task::none()
             }
-            Message::ShowWsMenu(idx) => {
-                self.ws_menu_idx = Some(idx);
-                Task::none()
-            }
-            Message::HideWsMenu => {
-                self.ws_menu_idx = None;
-                Task::none()
-            }
+            Message::ShowWsMenu(idx) => { self.ws_menu_idx = Some(idx); Task::none() }
+            Message::HideWsMenu => { self.ws_menu_idx = None; Task::none() }
             Message::EscapePressed => {
                 self.ws_menu_idx = None;
                 self.renaming_ws = None;
@@ -85,10 +89,19 @@ impl Cratty {
                 self.process_terminal_events();
                 Task::none()
             }
+            Message::WindowResized(size) => { self.viewport_w = size.width; Task::none() }
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
             Message::CloseWindow => with_window(window::close),
         }
     }
+}
+
+fn scroll_to_pane(strip: &cratty_core::PaperStrip, viewport_w: f32) -> Task<Message> {
+    let divider = 2.0;
+    let x: f32 = (0..strip.focus_idx)
+        .map(|i| strip.pane_width_at(i, viewport_w) + divider)
+        .sum();
+    operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
 }

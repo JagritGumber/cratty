@@ -10,13 +10,13 @@ use iced::{Element, Length, Rectangle};
 
 use crate::message::Message;
 use crate::term_backend::{EventProxy, TermBackend};
-use crate::term_canvas;
+use crate::{term_canvas, term_input};
 
-/// Canvas program that renders a terminal and handles keyboard input.
 struct TermProgram {
     term: Arc<FairMutex<Term<EventProxy>>>,
     notifier: Notifier,
     pending_resize: Arc<Mutex<Option<(u16, u16)>>>,
+    focused: bool,
 }
 
 impl canvas::Program<Message> for TermProgram {
@@ -26,19 +26,16 @@ impl canvas::Program<Message> for TermProgram {
         &self, _state: &mut (), event: &Event,
         _bounds: Rectangle, _cursor: iced::mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
+        if !self.focused { return None; }
         if let Event::Keyboard(iced::keyboard::Event::KeyPressed {
-            text, modifiers, ..
+            key, text, modifiers, ..
         }) = event
         {
-            // Don't forward Ctrl+Shift combos -- those are app shortcuts
-            if modifiers.control() && modifiers.shift() {
+            if modifiers.alt() && !modifiers.control() && !modifiers.shift() {
                 return None;
             }
-            if let Some(txt) = text {
-                let bytes = txt.as_bytes();
-                if !bytes.is_empty() {
-                    self.notifier.notify(Cow::Owned(bytes.to_vec()));
-                }
+            if let Some(bytes) = term_input::key_to_bytes(key, modifiers, text) {
+                self.notifier.notify(Cow::Owned(bytes));
             }
             return Some(canvas::Action::request_redraw());
         }
@@ -53,12 +50,12 @@ impl canvas::Program<Message> for TermProgram {
     }
 }
 
-/// Create a Canvas element for a terminal backend.
-pub fn view(backend: &TermBackend) -> Element<'_, Message> {
+pub fn view(backend: &TermBackend, focused: bool) -> Element<'_, Message> {
     let program = TermProgram {
         term: backend.term.clone(),
         notifier: Notifier(backend.sender.clone()),
         pending_resize: backend.pending_resize.clone(),
+        focused,
     };
 
     Canvas::new(program)

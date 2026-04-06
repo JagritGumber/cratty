@@ -11,16 +11,15 @@ pub fn subscription() -> Subscription<Message> {
             if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
                 return Some(Message::EscapePressed);
             }
-            if modifiers.control() && modifiers.shift() {
+            if modifiers.alt() && !modifiers.control() && !modifiers.shift() {
                 if let keyboard::Key::Character(c) = &key {
-                    if c.as_str().eq_ignore_ascii_case("t") {
-                        return Some(Message::NewWorkspace);
-                    }
-                    if c.as_str().eq_ignore_ascii_case("n") {
-                        return Some(Message::NewPane);
-                    }
-                    if c.as_str().eq_ignore_ascii_case("b") {
-                        return Some(Message::ToggleSidebar);
+                    match c.as_str().to_ascii_lowercase().as_str() {
+                        "t" => return Some(Message::NewWorkspace),
+                        "n" => return Some(Message::NewPane),
+                        "b" => return Some(Message::ToggleSidebar),
+                        "r" => return Some(Message::CyclePresetWidth),
+                        "f" => return Some(Message::ToggleMaximizePane),
+                        _ => {}
                     }
                 }
                 if let keyboard::Key::Named(named) = &key {
@@ -38,5 +37,7 @@ pub fn subscription() -> Subscription<Message> {
     });
     let tick_sub = iced::time::every(std::time::Duration::from_millis(16))
         .map(|_| Message::Tick);
-    Subscription::batch([key_sub, tick_sub])
+    let resize_sub = iced::window::resize_events()
+        .map(|(_id, size)| Message::WindowResized(size));
+    Subscription::batch([key_sub, tick_sub, resize_sub])
 }

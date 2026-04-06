@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use iced::widget::{container, row, text, Space};
+use iced::widget::{container, row, scrollable, text, Id, Space};
 use iced::{Color, Element, Length};
 
 use cratty_core::{PaneId, PaperStrip};
@@ -9,47 +9,45 @@ use crate::message::Message;
 use crate::pane::Pane;
 use crate::style::FG_MUTED;
 
-/// Render the paper strip: focused pane + adjacent panes side by side.
-/// Uses viewport.current() for smooth overlay transitions.
+pub fn strip_scroll_id() -> Id { Id::new("paper-strip") }
+
 pub fn view_strip<'a>(
-    strip: &PaperStrip, panes: &'a HashMap<PaneId, Pane>,
+    strip: &PaperStrip, panes: &'a HashMap<PaneId, Pane>, viewport_w: f32,
 ) -> Element<'a, Message> {
     if strip.panes.is_empty() {
         return container(Space::new()).width(Length::Fill).height(Length::Fill).into();
     }
 
-    let focus = strip.focus_idx;
-    let anim_pos = strip.viewport.current();
     let mut elements: Vec<Element<Message>> = Vec::new();
 
-    for (i, idx) in visible_range(focus, strip.panes.len()).iter().enumerate() {
+    for (i, pane_id) in strip.panes.iter().enumerate() {
         if i > 0 { elements.push(pane_divider()); }
-        if let Some(pane) = panes.get(&strip.panes[*idx]) {
-            let distance = (anim_pos - *idx as f32).abs().min(1.0);
-            elements.push(render_pane(pane, distance));
+        if let Some(pane) = panes.get(pane_id) {
+            let pane_w = strip.pane_width_at(i, viewport_w);
+            let distance = if i == strip.focus_idx { 0.0 } else { 1.0 };
+            elements.push(render_pane(pane, distance, pane_w));
         }
     }
 
-    row(elements).spacing(0).width(Length::Fill).height(Length::Fill).into()
+    scrollable(row(elements).spacing(0).height(Length::Fill))
+        .direction(scrollable::Direction::Horizontal(
+            scrollable::Scrollbar::new().width(0).scroller_width(0),
+        ))
+        .id(strip_scroll_id())
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
 
-fn visible_range(focus: usize, count: usize) -> Vec<usize> {
-    let mut r = Vec::new();
-    if focus > 0 { r.push(focus - 1); }
-    r.push(focus);
-    if focus + 1 < count { r.push(focus + 1); }
-    r
-}
-
-/// Render a pane with overlay based on distance from focus (0.0 = focused, 1.0 = fully dimmed).
-fn render_pane(pane: &Pane, distance: f32) -> Element<'_, Message> {
+fn render_pane(pane: &Pane, distance: f32, pane_w: f32) -> Element<'_, Message> {
     let focused_color = Color::from_rgb(0.30, 0.65, 0.90);
     let unfocused_color = Color::from_rgb(0.15, 0.15, 0.15);
     let border_color = lerp_color(focused_color, unfocused_color, distance);
     let border_w = 2.0 - distance;
 
+    let focused = distance < 0.01;
     let inner: Element<Message> = match &pane.backend {
-        Some(backend) => crate::term_widget::view(backend),
+        Some(backend) => crate::term_widget::view(backend, focused),
         None => container(text("Loading...").size(12).color(crate::style::FG_DIM))
             .center(Length::Fill)
             .style(|_| container::Style {
@@ -58,8 +56,9 @@ fn render_pane(pane: &Pane, distance: f32) -> Element<'_, Message> {
             })
             .into(),
     };
+
     let term_view = container(inner)
-        .width(Length::FillPortion(1)).height(Length::Fill)
+        .width(Length::Fixed(pane_w)).height(Length::Fill)
         .style(move |_| container::Style {
             border: iced::Border { color: border_color, width: border_w, radius: 0.0.into() },
             ..Default::default()
@@ -71,7 +70,7 @@ fn render_pane(pane: &Pane, distance: f32) -> Element<'_, Message> {
         let overlay_alpha = distance * 0.35;
         iced::widget::stack![
             term_view,
-            container(Space::new()).width(Length::Fill).height(Length::Fill)
+            container(Space::new()).width(Length::Fixed(pane_w)).height(Length::Fill)
                 .style(move |_| container::Style {
                     background: Some(iced::Background::Color(
                         Color::from_rgba(0.0, 0.0, 0.0, overlay_alpha),
@@ -79,7 +78,7 @@ fn render_pane(pane: &Pane, distance: f32) -> Element<'_, Message> {
                     ..Default::default()
                 }),
         ]
-        .width(Length::FillPortion(1)).height(Length::Fill).into()
+        .width(Length::Fixed(pane_w)).height(Length::Fill).into()
     }
 }
 
