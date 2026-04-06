@@ -19,6 +19,9 @@ pub fn subscription() -> Subscription<Message> {
                     if c.as_str().eq_ignore_ascii_case("n") {
                         return Some(Message::NewPane);
                     }
+                    if c.as_str().eq_ignore_ascii_case("b") {
+                        return Some(Message::ToggleSidebar);
+                    }
                 }
                 if let keyboard::Key::Named(named) = &key {
                     match named {

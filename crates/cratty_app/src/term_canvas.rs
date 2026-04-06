@@ -18,29 +18,25 @@ pub fn draw_grid(
 ) -> Vec<Geometry> {
     let t = term.lock();
     let grid = t.grid();
-    let cw = u32::from(CELL_W);
-    let ch = u32::from(CELL_H);
 
     // Signal resize if bounds changed
-    let new_cols = bounds.width as u16 / CELL_W;
-    let new_rows = bounds.height as u16 / CELL_H;
-    if new_cols > 0 && new_rows > 0 {
-        *pending_resize.lock().unwrap() = Some((new_cols, new_rows));
-    }
+    let new_cols = (bounds.width / CELL_W).floor().max(1.0) as u16;
+    let new_rows = (bounds.height / CELL_H).floor().max(1.0) as u16;
+    *pending_resize.lock().unwrap() = Some((new_cols, new_rows));
 
     let mut frame = Frame::new(renderer, bounds.size());
     frame.fill_rectangle(Point::ORIGIN, bounds.size(), BG);
 
     for indexed in grid.display_iter() {
-        let col = indexed.point.column.0 as u32;
-        let line = indexed.point.line.0 as u32;
-        let x = col * cw;
-        let y = line * ch;
-        let px = Point::new(x as f32, y as f32);
+        let col = indexed.point.column.0 as f32;
+        let line = indexed.point.line.0 as f32;
+        let x = col * CELL_W;
+        let y = line * CELL_H;
+        let px = Point::new(x, y);
 
         let bg_color = ansi_to_iced(indexed.bg);
         if bg_color != BG {
-            frame.fill_rectangle(px, Size::new(cw as f32, ch as f32), bg_color);
+            frame.fill_rectangle(px, Size::new(CELL_W, CELL_H), bg_color);
         }
 
         let c = indexed.c;
@@ -58,13 +54,12 @@ pub fn draw_grid(
         });
     }
 
-    // Cursor
-    let cursor_point = grid.cursor.point;
-    let cx = cursor_point.column.0 as u32 * cw;
-    let cy = cursor_point.line.0 as u32 * ch;
+    // Cursor (screen-relative, line.0 is always 0..screen_lines)
+    let cx = grid.cursor.point.column.0 as f32 * CELL_W;
+    let cy = grid.cursor.point.line.0 as f32 * CELL_H;
     frame.fill_rectangle(
-        Point::new(cx as f32, cy as f32),
-        Size::new(cw as f32, ch as f32),
+        Point::new(cx, cy),
+        Size::new(CELL_W, CELL_H),
         Color::from_rgba(0.8, 0.8, 0.8, 0.7),
     );
 

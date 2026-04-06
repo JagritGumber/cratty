@@ -30,6 +30,12 @@ impl Cratty {
         });
     }
 
+    pub fn tick_animations(&mut self) {
+        if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+            ws.strip.viewport.tick(0.08);
+        }
+    }
+
     pub fn apply_pending_resizes(&mut self) {
         for pane in self.panes.values_mut() {
             if let Some(backend) = &mut pane.backend {

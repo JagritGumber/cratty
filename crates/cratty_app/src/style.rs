@@ -11,5 +11,5 @@ pub const TITLEBAR_H: f32 = 36.0;
 
 // Terminal font metrics (monospace approximation from font size)
 pub const TERM_FONT_SIZE: f32 = 14.0;
-pub const CELL_W: u16 = 8;
-pub const CELL_H: u16 = 18;
+pub const CELL_W: f32 = 8.0;
+pub const CELL_H: f32 = 18.0;
