@@ -44,7 +44,7 @@ pub struct TermBackend {
 impl TermBackend {
     pub fn new(
         shell: String, args: Vec<String>, cwd: Option<PathBuf>,
-        cols: u16, rows: u16, cell_w: u16, cell_h: u16,
+        cols: u16, rows: u16, cell_w: f32, cell_h: f32,
     ) -> anyhow::Result<Self> {
         let size = TermSize { cols, rows };
         let (event_tx, event_rx) = std::sync::mpsc::channel();
@@ -63,8 +63,8 @@ impl TermBackend {
         let window_size = WindowSize {
             num_lines: rows,
             num_cols: cols,
-            cell_width: cell_w,
-            cell_height: cell_h,
+            cell_width: cell_w as u16,
+            cell_height: cell_h as u16,
         };
 
         let pty = tty::new(&pty_config, window_size, 0u64)?;
@@ -83,17 +83,17 @@ impl TermBackend {
         let _ = self.notifier.notify(data.to_vec());
     }
 
-    pub fn resize(&mut self, cols: u16, rows: u16, cell_w: u16, cell_h: u16) {
+    pub fn resize(&mut self, cols: u16, rows: u16, cell_w: f32, cell_h: f32) {
         self.size = TermSize { cols, rows };
         let window_size = WindowSize {
             num_lines: rows, num_cols: cols,
-            cell_width: cell_w, cell_height: cell_h,
+            cell_width: cell_w as u16, cell_height: cell_h as u16,
         };
         let _ = self.notifier.on_resize(window_size);
         self.term.lock().resize(self.size);
     }
 
-    pub fn apply_pending_resize(&mut self, cell_w: u16, cell_h: u16) {
+    pub fn apply_pending_resize(&mut self, cell_w: f32, cell_h: f32) {
         let pending = self.pending_resize.lock().unwrap().take();
         if let Some((cols, rows)) = pending {
             if cols != self.size.cols || rows != self.size.rows {
