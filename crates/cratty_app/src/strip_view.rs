@@ -10,6 +10,7 @@ use crate::pane::Pane;
 use crate::style::FG_MUTED;
 
 /// Render the paper strip: focused pane + adjacent panes side by side.
+/// Uses viewport.current() for smooth overlay transitions.
 pub fn view_strip<'a>(
     strip: &PaperStrip, panes: &'a HashMap<PaneId, Pane>,
 ) -> Element<'a, Message> {
@@ -18,12 +19,14 @@ pub fn view_strip<'a>(
     }
 
     let focus = strip.focus_idx;
+    let anim_pos = strip.viewport.current();
     let mut elements: Vec<Element<Message>> = Vec::new();
 
     for (i, idx) in visible_range(focus, strip.panes.len()).iter().enumerate() {
         if i > 0 { elements.push(pane_divider()); }
         if let Some(pane) = panes.get(&strip.panes[*idx]) {
-            elements.push(render_pane(pane, *idx == focus));
+            let distance = (anim_pos - *idx as f32).abs().min(1.0);
+            elements.push(render_pane(pane, distance));
         }
     }
 
@@ -38,13 +41,12 @@ fn visible_range(focus: usize, count: usize) -> Vec<usize> {
     r
 }
 
-fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
-    let border_color = if is_focused {
-        Color::from_rgb(0.30, 0.65, 0.90)
-    } else {
-        Color::from_rgb(0.15, 0.15, 0.15)
-    };
-    let border_w = if is_focused { 2.0 } else { 1.0 };
+/// Render a pane with overlay based on distance from focus (0.0 = focused, 1.0 = fully dimmed).
+fn render_pane(pane: &Pane, distance: f32) -> Element<'_, Message> {
+    let focused_color = Color::from_rgb(0.30, 0.65, 0.90);
+    let unfocused_color = Color::from_rgb(0.15, 0.15, 0.15);
+    let border_color = lerp_color(focused_color, unfocused_color, distance);
+    let border_w = 2.0 - distance;
 
     let inner: Element<Message> = match &pane.backend {
         Some(backend) => crate::term_widget::view(backend),
@@ -63,19 +65,30 @@ fn render_pane(pane: &Pane, is_focused: bool) -> Element<'_, Message> {
             ..Default::default()
         });
 
-    if is_focused {
+    if distance < 0.01 {
         term_view.into()
     } else {
+        let overlay_alpha = distance * 0.35;
         iced::widget::stack![
             term_view,
             container(Space::new()).width(Length::Fill).height(Length::Fill)
-                .style(|_| container::Style {
-                    background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
+                .style(move |_| container::Style {
+                    background: Some(iced::Background::Color(
+                        Color::from_rgba(0.0, 0.0, 0.0, overlay_alpha),
+                    )),
                     ..Default::default()
                 }),
         ]
         .width(Length::FillPortion(1)).height(Length::Fill).into()
     }
+}
+
+fn lerp_color(a: Color, b: Color, t: f32) -> Color {
+    Color::from_rgb(
+        a.r + (b.r - a.r) * t,
+        a.g + (b.g - a.g) * t,
+        a.b + (b.b - a.b) * t,
+    )
 }
 
 fn pane_divider() -> Element<'static, Message> {

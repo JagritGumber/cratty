@@ -93,8 +93,7 @@ impl Cratty {
         };
 
         let body: Element<Message> = if self.sidebar_collapsed {
-            row![sidebar::collapse_btn(false), main_area]
-                .width(Length::Fill).height(Length::Fill).into()
+            main_area
         } else {
             let sb = sidebar::view_sidebar(
                 &self.workspaces, &self.ws_colors, &self.panes,

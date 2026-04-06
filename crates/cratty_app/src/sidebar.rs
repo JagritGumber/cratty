@@ -23,7 +23,6 @@ pub fn view_sidebar<'a>(
     let header = row![
         text("Workspaces").size(11).color(FG_DIM),
         Space::new().width(Length::Fill),
-        collapse_btn(true),
     ]
     .align_y(alignment::Vertical::Center)
     .padding([6, 8]);
@@ -54,20 +53,6 @@ pub fn view_sidebar<'a>(
         .width(SIDEBAR_W).height(Length::Fill)
         .style(|_| container::Style {
             background: Some(iced::Background::Color(BG_TITLEBAR)),
-            ..Default::default()
-        })
-        .into()
-}
-
-pub fn collapse_btn(is_expanded: bool) -> Element<'static, Message> {
-    let icon = if is_expanded { ICO_CARET_LEFT } else { ICO_CARET_RIGHT };
-    button(centered_icon(icon, 10.0))
-        .on_press(Message::ToggleSidebar)
-        .width(24).height(24).padding(0)
-        .style(|_, status| button::Style {
-            text_color: match status {
-                button::Status::Hovered => FG_ACTIVE, _ => FG_DIM,
-            },
             ..Default::default()
         })
         .into()

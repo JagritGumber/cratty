@@ -19,12 +19,16 @@ impl Cratty {
             Message::FocusPaneLeft => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
                     ws.strip.focus_left();
+                    let idx = ws.strip.focus_idx as f32;
+                    ws.strip.viewport.animate_to(idx);
                 }
                 Task::none()
             }
             Message::FocusPaneRight => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
                     ws.strip.focus_right();
+                    let idx = ws.strip.focus_idx as f32;
+                    ws.strip.viewport.animate_to(idx);
                 }
                 Task::none()
             }
@@ -76,6 +80,7 @@ impl Cratty {
             }
             Message::Tick => {
                 self.poll_pending_backends();
+                self.tick_animations();
                 self.apply_pending_resizes();
                 self.process_terminal_events();
                 Task::none()
