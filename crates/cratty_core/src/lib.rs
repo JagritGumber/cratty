@@ -1,6 +1,9 @@
+pub mod column_width;
 pub mod config;
+pub mod config_io;
 pub mod event;
 pub mod focus;
+pub mod font_metrics;
 pub mod id;
 pub mod keybindings;
 pub mod paper_strip;
@@ -11,8 +14,10 @@ pub mod workspace;
 
 pub use config::AppConfig;
 pub use focus::{FocusState, FocusTarget, InputMode};
+pub use font_metrics::FontMetrics;
 pub use id::{IdGen, PaneId, WorkspaceId};
-pub use paper_strip::{ColumnWidth, PaperStrip};
+pub use column_width::ColumnWidth;
+pub use paper_strip::PaperStrip;
 pub use view_offset::ViewOffset;
 pub use session::{Session, SessionId, SessionType};
 pub use workspace::Workspace;

@@ -14,8 +14,9 @@ pub fn view_ws_item(
     color: Option<Color>, pane_count: usize, active: bool,
     show_menu: bool,
 ) -> Element<'_, Message> {
+    let bar_w = if active { 4 } else { 3 };
     let accent_bar: Element<Message> = container(Space::new())
-        .width(3)
+        .width(bar_w)
         .height(Length::Fill)
         .style(move |_| container::Style {
             background: Some(iced::Background::Color(
@@ -58,7 +59,7 @@ pub fn view_ws_item(
     .align_y(alignment::Vertical::Center)
     .height(32);
 
-    let bg = if active { BG_MENU_HOVER } else { BG_TITLEBAR };
+    let bg = if active { BG_WS_ACTIVE } else { BG_TITLEBAR };
 
     let item = button(content)
         .on_press(Message::SwitchWorkspace(idx))

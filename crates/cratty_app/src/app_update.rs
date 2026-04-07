@@ -31,31 +31,27 @@ impl Cratty {
                 }
                 Task::none()
             }
-            Message::CyclePresetWidth => {
+            Message::CyclePresetWidth | Message::ToggleMaximizePane
+            | Message::GrowPane | Message::ShrinkPane => {
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    ws.strip.cycle_preset_width();
-                    return scroll_to_pane(&ws.strip, self.viewport_w);
-                }
-                Task::none()
-            }
-            Message::ToggleMaximizePane => {
-                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    ws.strip.toggle_maximize();
+                    match message {
+                        Message::CyclePresetWidth => ws.strip.cycle_preset_width(),
+                        Message::ToggleMaximizePane => ws.strip.toggle_maximize(),
+                        Message::GrowPane => ws.strip.adjust_focused_width(0.1),
+                        _ => ws.strip.adjust_focused_width(-0.1),
+                    }
                     return scroll_to_pane(&ws.strip, self.viewport_w);
                 }
                 Task::none()
             }
             Message::ToggleSidebar => {
-                self.sidebar_collapsed = !self.sidebar_collapsed;
-                Task::none()
+                self.sidebar_collapsed = !self.sidebar_collapsed; Task::none()
             }
             Message::RenameWorkspace(ws_id) => {
                 if let Some(ws) = self.workspaces.iter().find(|w| w.id == ws_id) {
                     self.rename_text = ws.name.clone();
                 }
-                self.renaming_ws = Some(ws_id);
-                self.ws_menu_idx = None;
-                Task::none()
+                self.renaming_ws = Some(ws_id); self.ws_menu_idx = None; Task::none()
             }
             Message::RenameInput(text) => { self.rename_text = text; Task::none() }
             Message::RenameSubmit => {
@@ -70,9 +66,7 @@ impl Cratty {
                 Task::none()
             }
             Message::SetWorkspaceColor(ws_id, color) => {
-                self.ws_colors.insert(ws_id, color);
-                self.ws_menu_idx = None;
-                Task::none()
+                self.ws_colors.insert(ws_id, color); self.ws_menu_idx = None; Task::none()
             }
             Message::ShowWsMenu(idx) => { self.ws_menu_idx = Some(idx); Task::none() }
             Message::HideWsMenu => { self.ws_menu_idx = None; Task::none() }
@@ -100,8 +94,10 @@ impl Cratty {
 
 fn scroll_to_pane(strip: &cratty_core::PaperStrip, viewport_w: f32) -> Task<Message> {
     let divider = 2.0;
-    let x: f32 = (0..strip.focus_idx)
+    let pane_start: f32 = (0..strip.focus_idx)
         .map(|i| strip.pane_width_at(i, viewport_w) + divider)
         .sum();
+    let pane_w = strip.pane_width_at(strip.focus_idx, viewport_w);
+    let x = (pane_start - (viewport_w - pane_w) / 2.0).max(0.0);
     operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
 }

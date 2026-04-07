@@ -47,6 +47,7 @@ fn named_key_bytes(named: &Named, mods: &Modifiers) -> Option<Vec<u8>> {
         Named::Backspace => "\x7f",
         Named::Tab if mods.shift() => "\x1b[Z",
         Named::Tab => "\t",
+        Named::Space => " ",
         Named::Escape => "\x1b",
         Named::F1 => "\x1bOP",
         Named::F2 => "\x1bOQ",

@@ -9,17 +9,20 @@ use cratty_core::{PaneId, Workspace, WorkspaceId};
 use crate::message::Message;
 use crate::pane::Pane;
 use crate::strip_view::strip_scroll_id;
-use crate::style::{CELL_H, CELL_W};
 use crate::term_backend::TermBackend;
 use crate::terminal;
 use crate::{Cratty, PendingBackend};
 
 impl Cratty {
     fn spawn_backend(&mut self, pane_id: PaneId, cwd: Option<PathBuf>) {
+        let cell_w = self.metrics.cell_w;
+        let cell_h = self.metrics.cell_h;
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let (shell, args) = terminal::default_shell();
-            let result = TermBackend::new(shell, args, cwd, 80, 24, CELL_W, CELL_H);
+            let result = TermBackend::new(
+                shell, args, cwd, 80, 24, cell_w, cell_h,
+            );
             let _ = tx.send(result);
         });
         self.pending_backends.push(PendingBackend { pane_id, rx });
@@ -37,7 +40,9 @@ impl Cratty {
         scroll_to_strip_start()
     }
 
-    pub fn add_pane_to_active_workspace(&mut self, cwd: Option<PathBuf>) -> Task<Message> {
+    pub fn add_pane_to_active_workspace(
+        &mut self, cwd: Option<PathBuf>,
+    ) -> Task<Message> {
         let ws = match self.workspaces.get_mut(self.active_ws) {
             Some(ws) => ws,
             None => return self.create_workspace(cwd),
@@ -50,7 +55,10 @@ impl Cratty {
             .map(|i| ws.strip.pane_width_at(i, self.viewport_w) + divider)
             .sum();
         self.spawn_backend(pane_id, cwd);
-        operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
+        operation::scroll_to(
+            strip_scroll_id(),
+            scrollable::AbsoluteOffset { x, y: 0.0 },
+        )
     }
 
     pub fn close_workspace(&mut self, idx: usize) -> Task<Message> {
@@ -73,9 +81,9 @@ impl Cratty {
         self.panes.remove(&pid);
         let active_id = self.workspaces.get(self.active_ws).map(|w| w.id);
         for ws in &mut self.workspaces { ws.strip.remove(pid); }
-        let empty_ids: Vec<WorkspaceId> = self.workspaces.iter()
+        let empty: Vec<WorkspaceId> = self.workspaces.iter()
             .filter(|ws| ws.is_empty()).map(|ws| ws.id).collect();
-        for id in &empty_ids { self.ws_colors.remove(id); }
+        for id in &empty { self.ws_colors.remove(id); }
         self.workspaces.retain(|ws| !ws.is_empty());
         self.active_ws = active_id
             .and_then(|id| self.workspaces.iter().position(|w| w.id == id))

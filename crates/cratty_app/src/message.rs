@@ -11,6 +11,8 @@ pub enum Message {
     FocusPaneRight,
     CyclePresetWidth,
     ToggleMaximizePane,
+    GrowPane,
+    ShrinkPane,
     ToggleSidebar,
     RenameWorkspace(WorkspaceId),
     RenameInput(String),

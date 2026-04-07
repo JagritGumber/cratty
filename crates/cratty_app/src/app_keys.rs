@@ -22,6 +22,10 @@ pub fn subscription() -> Subscription<Message> {
                         _ => {}
                     }
                 }
+                if let keyboard::Key::Character(c) = &key {
+                    if c.as_str() == "-" { return Some(Message::ShrinkPane); }
+                    if c.as_str() == "=" { return Some(Message::GrowPane); }
+                }
                 if let keyboard::Key::Named(named) = &key {
                     match named {
                         keyboard::key::Named::ArrowLeft =>

@@ -21,7 +21,7 @@ pub fn view_sidebar<'a>(
     menu_idx: Option<usize>,
 ) -> Element<'a, Message> {
     let header = row![
-        text("Workspaces").size(11).color(FG_DIM),
+        text("Workspaces").size(11).color(FG_INACTIVE),
         Space::new().width(Length::Fill),
     ]
     .align_y(alignment::Vertical::Center)

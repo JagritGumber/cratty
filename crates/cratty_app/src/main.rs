@@ -3,16 +3,15 @@ use std::sync::mpsc;
 
 use iced::widget::column;
 use iced::{Color, Element, Length, Subscription, Task, Theme};
-
-use cratty_core::{IdGen, PaneId, Workspace, WorkspaceId};
-
+use cratty_core::{AppConfig, FontMetrics, IdGen, PaneId, Workspace, WorkspaceId};
 use term_backend::TermBackend;
 
 mod app_actions; mod app_keys; mod app_tick; mod app_update;
 mod home; mod message; mod pane; mod sidebar; mod strip_view;
 mod style; mod term_backend; mod term_canvas; mod term_colors;
-mod term_input; mod term_widget; mod terminal; mod titlebar; mod widgets;
-mod ws_item; mod ws_menu;
+mod term_cursor; mod term_decor; mod term_palette;
+mod term_input; mod term_widget; mod terminal; mod titlebar;
+mod widgets; mod ws_item; mod ws_menu;
 
 use message::Message;
 use pane::Pane;
@@ -38,6 +37,8 @@ pub struct PendingBackend {
 }
 
 pub struct Cratty {
+    pub config: AppConfig,
+    pub metrics: FontMetrics,
     pub workspaces: Vec<Workspace>,
     pub active_ws: usize,
     pub panes: HashMap<PaneId, Pane>,
@@ -61,12 +62,15 @@ where
 
 impl Cratty {
     fn new() -> (Self, Task<Message>) {
+        let config = AppConfig::load(&AppConfig::config_path()).unwrap_or_default();
+        let metrics = FontMetrics::from_size(config.font_size);
         (Self {
+            config, metrics,
             workspaces: vec![], active_ws: 0,
             panes: HashMap::new(), ws_colors: HashMap::new(),
             id_gen: IdGen::new(), sidebar_collapsed: false,
-            renaming_ws: None, rename_text: String::new(), ws_menu_idx: None,
-            pending_backends: vec![], viewport_w: 1200.0,
+            renaming_ws: None, rename_text: String::new(),
+            ws_menu_idx: None, pending_backends: vec![], viewport_w: 1200.0,
         }, Task::none())
     }
 
@@ -75,11 +79,10 @@ impl Cratty {
         let bar = titlebar::view_titlebar();
         let main_area: Element<Message> = match self.workspaces.get(self.active_ws) {
             Some(ws) if !ws.is_empty() => {
-                strip_view::view_strip(&ws.strip, &self.panes, self.viewport_w)
+                strip_view::view_strip(&ws.strip, &self.panes, self.viewport_w, self.metrics)
             }
             _ => home::view_home(),
         };
-
         let body: Element<Message> = if self.sidebar_collapsed {
             main_area
         } else {
@@ -89,11 +92,9 @@ impl Cratty {
             );
             row![sb, main_area].width(Length::Fill).height(Length::Fill).into()
         };
-
         column![bar, body].width(Length::Fill).height(Length::Fill).into()
     }
 
     fn theme(&self) -> Theme { Theme::Dark }
-
     fn subscription(&self) -> Subscription<Message> { app_keys::subscription() }
 }

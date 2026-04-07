@@ -8,6 +8,8 @@ use alacritty_terminal::term::Term;
 use iced::widget::canvas::{self, Canvas, Event, Geometry};
 use iced::{Element, Length, Rectangle};
 
+use cratty_core::FontMetrics;
+
 use crate::message::Message;
 use crate::term_backend::{EventProxy, TermBackend};
 use crate::{term_canvas, term_input};
@@ -17,6 +19,7 @@ struct TermProgram {
     notifier: Notifier,
     pending_resize: Arc<Mutex<Option<(u16, u16)>>>,
     focused: bool,
+    metrics: FontMetrics,
 }
 
 impl canvas::Program<Message> for TermProgram {
@@ -46,16 +49,22 @@ impl canvas::Program<Message> for TermProgram {
         &self, _state: &(), renderer: &iced::Renderer,
         _theme: &iced::Theme, bounds: Rectangle, _cursor: iced::mouse::Cursor,
     ) -> Vec<Geometry> {
-        term_canvas::draw_grid(&self.term, renderer, bounds, &self.pending_resize)
+        term_canvas::draw_grid(
+            &self.term, renderer, bounds,
+            &self.pending_resize, self.focused, self.metrics,
+        )
     }
 }
 
-pub fn view(backend: &TermBackend, focused: bool) -> Element<'_, Message> {
+pub fn view(
+    backend: &TermBackend, focused: bool, metrics: FontMetrics,
+) -> Element<'_, Message> {
     let program = TermProgram {
         term: backend.term.clone(),
         notifier: Notifier(backend.sender.clone()),
         pending_resize: backend.pending_resize.clone(),
         focused,
+        metrics,
     };
 
     Canvas::new(program)
