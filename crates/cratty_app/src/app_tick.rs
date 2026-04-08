@@ -1,5 +1,6 @@
 use cratty_core::PaneId;
 
+use crate::terminal;
 use crate::Cratty;
 
 impl Cratty {
@@ -62,6 +63,7 @@ impl Cratty {
                 match ev {
                     alacritty_terminal::event::Event::Title(title) => {
                         if let Some(pane) = self.panes.get_mut(&pid) {
+                            pane.cwd = terminal::extract_cwd(&title);
                             pane.title = title;
                         }
                     }

@@ -75,7 +75,10 @@ impl Cratty {
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
-            Message::CloseWindow => with_window(window::close),
+            Message::CloseWindow => {
+                self.save_layout();
+                with_window(window::close)
+            }
         }
     }
 }

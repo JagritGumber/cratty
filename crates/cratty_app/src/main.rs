@@ -2,10 +2,9 @@ use std::{collections::HashMap, sync::mpsc};
 
 use iced::widget::column;
 use iced::{Color, Element, Length, Subscription, Task, Theme};
-use cratty_core::{AppConfig, FontMetrics, IdGen, PaneId, Workspace, WorkspaceId};
-use term_backend::TermBackend;
+use cratty_core::{AppConfig, FontMetrics, IdGen, PaneId, Workspace, WorkspaceId}; use term_backend::TermBackend;
 
-mod app_actions; mod app_keys; mod app_tick; mod app_update; mod app_ws_ops;
+mod app_actions; mod app_keys; mod app_persist; mod app_tick; mod app_update; mod app_ws_ops;
 mod clipboard; mod clipboard_ops; mod home; mod message;
 mod pane; mod sidebar; mod strip_view;
 mod style; mod term_backend; mod term_canvas; mod term_colors;
@@ -64,14 +63,16 @@ impl Cratty {
     fn new() -> (Self, Task<Message>) {
         let config = AppConfig::load(&AppConfig::config_path()).unwrap_or_default();
         let metrics = FontMetrics::from_size(config.font_size);
-        (Self {
+        let mut app = Self {
             config, metrics,
             workspaces: vec![], active_ws: 0,
             panes: HashMap::new(), ws_colors: HashMap::new(),
             id_gen: IdGen::new(), sidebar_collapsed: false,
             renaming_ws: None, rename_text: String::new(),
             ws_menu_idx: None, pending_backends: vec![], viewport_w: 1200.0,
-        }, Task::none())
+        };
+        app.restore_layout();
+        (app, Task::none())
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -95,6 +96,5 @@ impl Cratty {
         column![bar, body].width(Length::Fill).height(Length::Fill).into()
     }
 
-    fn theme(&self) -> Theme { Theme::Dark }
-    fn subscription(&self) -> Subscription<Message> { app_keys::subscription() }
+    fn theme(&self) -> Theme { Theme::Dark }  fn subscription(&self) -> Subscription<Message> { app_keys::subscription() }
 }

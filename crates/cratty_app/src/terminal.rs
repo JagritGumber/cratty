@@ -25,6 +25,7 @@ fn detect_shell() -> (String, Vec<String>) {
     }
 }
 
+#[allow(dead_code)]
 pub fn extract_cwd(title: &str) -> Option<PathBuf> {
     let candidates: Vec<&str> = vec![
         title.trim(),
@@ -41,6 +42,7 @@ pub fn extract_cwd(title: &str) -> Option<PathBuf> {
     None
 }
 
+#[allow(dead_code)]
 fn extract_embedded_path(title: &str) -> Option<String> {
     if let Some(idx) = title.find(":\\") {
         if idx > 0 {

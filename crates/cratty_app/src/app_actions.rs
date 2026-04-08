@@ -1,11 +1,8 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
-
 use iced::widget::{operation, scrollable};
 use iced::Task;
-
 use cratty_core::{PaneId, Workspace, WorkspaceId};
-
 use crate::message::Message;
 use crate::pane::Pane;
 use crate::strip_view::strip_scroll_id;
@@ -14,7 +11,7 @@ use crate::terminal;
 use crate::{Cratty, PendingBackend};
 
 impl Cratty {
-    fn spawn_backend(&mut self, pane_id: PaneId, cwd: Option<PathBuf>) {
+    pub fn spawn_backend(&mut self, pane_id: PaneId, cwd: Option<PathBuf>) {
         let cell_w = self.metrics.cell_w;
         let cell_h = self.metrics.cell_h;
         let (tx, rx) = mpsc::channel();
@@ -47,6 +44,11 @@ impl Cratty {
             Some(ws) => ws,
             None => return self.create_workspace(cwd),
         };
+        let inherited_cwd = cwd.or_else(|| {
+            ws.focused_pane()
+                .and_then(|pid| self.panes.get(&pid))
+                .and_then(|p| p.cwd.clone())
+        });
         let pane_id = self.id_gen.next_pane();
         self.panes.insert(pane_id, Pane::new_loading(pane_id));
         ws.strip.push(pane_id);
@@ -54,7 +56,7 @@ impl Cratty {
         let x: f32 = (0..ws.strip.focus_idx)
             .map(|i| ws.strip.pane_width_at(i, self.viewport_w) + divider)
             .sum();
-        self.spawn_backend(pane_id, cwd);
+        self.spawn_backend(pane_id, inherited_cwd);
         operation::scroll_to(
             strip_scroll_id(),
             scrollable::AbsoluteOffset { x, y: 0.0 },
