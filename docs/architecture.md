@@ -2,134 +2,141 @@
 
 ## What Is Cratty?
 
-A native terminal emulator that replicates Tabby's UX without Electron. Tabby is ~200MB and runs on Chromium + Node.js. Cratty is ~2.4MB and talks directly to the GPU.
+Niri for terminals. A native terminal emulator with a paper window manager where each pane defines its own width and the viewport scrolls horizontally. Built in Rust with iced 0.14.
 
 ## Stack
 
 ```
-┌─ cratty.exe ──────────────────────────────────┐
-│                                                │
-│  ┌─ iced 0.14 (Elm Architecture) ───────────┐  │
-│  │                                           │  │
-│  │  Custom Chrome (decorations: false)       │  │
-│  │  ┌─────────────────────────────────────┐  │  │
-│  │  │ Tabs  [⋮ ✕]  [+]        [─] [□] [✕]│  │  │
-│  │  └─────────────────────────────────────┘  │  │
-│  │                                           │  │
-│  │  ┌─ iced_term 0.8 ─────────────────────┐  │  │
-│  │  │  ┌─ alacritty_terminal 0.25 ──────┐ │  │  │
-│  │  │  │  VT100/220/xterm parser        │ │  │  │
-│  │  │  │  Terminal grid + scrollback     │ │  │  │
-│  │  │  └────────────────────────────────┘ │  │  │
-│  │  │  PTY backend (conpty / unix pty)    │  │  │
-│  │  └─────────────────────────────────────┘  │  │
-│  │                                           │  │
-│  │  wgpu renderer (GPU-accelerated)          │  │
-│  └───────────────────────────────────────────┘  │
-│                                                │
-│  Shell: pwsh.exe / bash / cmd.exe              │
-└────────────────────────────────────────────────┘
+cratty.exe (~3MB native binary)
+  |
+  iced 0.14 (Elm architecture, wgpu GPU rendering)
+  |-- Custom chrome (decorations: false, Phosphor Bold icons)
+  |-- Sidebar (workspace list, rename, color badges)
+  |-- Horizontal scrollable (paper WM strip)
+  |     |-- Per-pane containers with fixed pixel widths
+  |     |-- Canvas widgets (terminal rendering)
+  |
+  alacritty_terminal 0.25.1 (VT parser + grid + scrollback)
+  |-- Term<EventProxy> per pane
+  |-- EventLoop per PTY (spawned thread)
+  |-- Notifier for input delivery
+  |
+  Shell (pwsh.exe / bash / cmd.exe via config or auto-detect)
 ```
 
 ## Workspace Crates
 
-### cratty_app (the binary)
-All GUI code lives here. Single file: `src/main.rs`.
+### cratty_app (binary, ~2900 lines across 24 modules)
 
-Responsibilities:
-- iced application bootstrap
-- Custom titlebar with Phosphor Bold icons
-- Tab management (create, close, switch, rename)
-- Three-dot dropdown menu (stack overlay)
-- Window chrome (drag, minimize, maximize, close)
-- Terminal widget hosting via iced_term
+All GUI code. Modules organized by concern:
 
-### cratty_core (library, not yet wired)
-Scaffolded types for future use:
-- `AppConfig` — YAML config with serde (font, shell profiles, quake mode)
-- `Session` trait — unified interface for local/SSH/serial backends
-- `KeybindingSet` — configurable keybindings
-- `Theme` — ANSI color palette
+**App lifecycle:** main.rs (state + iced bootstrap), app_update.rs (message dispatch), app_tick.rs (per-frame updates), app_keys.rs (keyboard subscriptions), app_actions.rs (workspace/pane operations), app_ws_ops.rs (rename/menu handlers), app_persist.rs (layout save/restore)
+
+**Terminal layer:** term_backend.rs (PTY wrapper), term_canvas.rs (grid cell rendering with flags), term_colors.rs (color resolution), term_palette.rs (256-color xterm table), term_decor.rs (underline/strikethrough), term_cursor.rs (block/hollow cursor), term_widget.rs (Canvas Program + input), term_input.rs (key-to-ANSI conversion), term_scroll.rs (scrollback helper)
+
+**UI:** strip_view.rs (paper strip scrollable), sidebar.rs (workspace list), ws_item.rs (workspace entry), ws_menu.rs (context menu), titlebar.rs (window chrome), home.rs (empty state), widgets.rs (icon helpers), style.rs (color constants)
+
+**Clipboard:** clipboard.rs (arboard wrapper), clipboard_ops.rs (copy/paste logic)
+
+### cratty_core (library, ~600 lines)
+
+Domain types and config:
+- `AppConfig` + `config_io` -- YAML config with font, shell profiles, quake mode
+- `PaperStrip` -- horizontal pane layout with per-pane widths, focus, swap, maximize
+- `ColumnWidth` -- Proportion(f32) or Fixed(f32), serializable
+- `ViewOffset` -- spring-based animation state
+- `FontMetrics` -- cell dimensions derived from font size
+- `Workspace`, `PaneId`, `WorkspaceId`, `IdGen` -- identity types
+- `FocusState`, `InputMode` -- keyboard focus state machine
+- `SavedLayout` -- serializable workspace layout for session recovery
 
 ### cratty_vt (Zig VT parser, dormant)
-A Zig-based VT parser and terminal grid. Built but unused — iced_term uses alacritty_terminal internally. Kept for the planned Zig rewrite.
+
+A Zig-based VT parser and terminal grid with Rust FFI bindings. Built but unused since alacritty_terminal handles VT parsing. Kept for the planned Zig rewrite.
 
 ## Data Flow
 
 ```
-PTY (shell process)
-  │
-  │ bytes (stdout)
-  ▼
-iced_term backend (alacritty_terminal parses VT sequences)
-  │
-  │ Event::BackendCall(term_id, command)
-  ▼
-Cratty::subscription() → Message::TermEvent
-  │
-  │ 
-  ▼
-Cratty::update() → tab.term.handle(Command::ProxyToBackend(cmd))
-  │
-  │ returns Action::Shutdown | ChangeTitle | Ignore
-  ▼
-Cratty::view() → TerminalView::show(&tab.term) renders the grid
-  │
-  ▼
-wgpu → GPU → pixels on screen
+Shell (stdout bytes)
+  |
+  v
+alacritty_terminal EventLoop (background thread, parses VT sequences)
+  |
+  v
+EventProxy -> mpsc::channel -> event_rx (Title, Exit events)
+  |
+  v
+app_tick.rs: drain_events() on each Tick (16ms / 60fps)
+  |-- Event::Title -> update pane.title + extract CWD
+  |-- Event::Exit -> remove pane, clean empty workspaces
+  v
+term_canvas.rs: draw_grid() locks Term, iterates grid.display_iter()
+  |-- Per cell: read flags (bold/dim/italic/underline/inverse/hidden)
+  |-- Resolve colors via term_palette (256 indexed + RGB)
+  |-- Draw text with Font { weight, style } on Canvas frame
+  |-- Draw decorations (underline, strikethrough) via term_decor
+  |-- Draw cursor (filled block or hollow outline) via term_cursor
+  v
+wgpu -> GPU -> pixels
+
+Keyboard input (reverse path):
+  iced KeyPressed event -> term_widget.rs update()
+  |-- Filter: Alt combos -> app shortcuts (never reach PTY)
+  |-- Filter: Ctrl+Shift combos -> clipboard/UI shortcuts
+  |-- term_input::key_to_bytes() -> ANSI escape sequences
+  |-- Notifier.notify(bytes) -> PTY stdin
 ```
+
+## Paper WM Architecture
+
+The core philosophy: each pane defines its own width. The viewport scrolls.
+
+```
+Workspace "Dev"
+  PaperStrip
+    panes:  [PaneId(1), PaneId(2), PaneId(3)]
+    widths: [Proportion(0.5), Proportion(0.333), Proportion(0.667)]
+    focus_idx: 1  (PaneId(2) is focused)
+    saved_scroll_x: 450.0  (preserved across workspace switches)
+```
+
+Width resolution: `Proportion(0.5)` at viewport 1200px = 600px. `Fixed(400.0)` = 400px always.
+
+Preset cycling (Alt+R): 1/3 -> 1/2 -> 2/3 -> 1/3. Maximize (Alt+F) saves previous width and sets Proportion(1.0). Incremental resize (Alt+Minus/Equal) adjusts by 0.1.
+
+Strip rendered as iced `scrollable(row(...)).direction(Horizontal)` with invisible scrollbar. Each pane gets `Length::Fixed(pane_w)`. Focused pane centered via `operation::scroll_to`.
 
 ## Key Design Decisions
 
-### Why custom chrome?
-Tabby puts tabs in the titlebar. OS decorations don't allow this. `decorations(false)` gives us full control over the titlebar area, letting tabs sit directly in it.
+### Why custom Canvas renderer instead of iced_term?
 
-### Why alacritty_terminal over custom VT parser?
-We built a Zig parser but it couldn't handle PowerShell's complex escape sequences (bracketed paste, OSC title updates, prompt marks). alacritty_terminal is battle-tested and handles everything.
+iced_term's TerminalView doesn't render inside a horizontal scrollable with fixed pixel widths (goes blank). Canvas widgets use local coordinates with `with_translation`, which iced's scrollable handles correctly. Building our own renderer also gives us control over text attributes, cursor shapes, and scroll behavior.
 
-### Why stack overlay for menus?
-iced has no built-in popover/dropdown. Rendering a menu inside a fixed-height titlebar clips it. The `stack` widget layers elements on the z-axis, so we render the menu on top of everything with an invisible scrim behind it for click-to-close.
+### Why Alt modifier for shortcuts?
 
-### Why store last_size for new tabs?
-iced_term's `TerminalView::handle_resize` only fires during `update()`, which requires input events. New tabs are created but never receive events until focused, so they default to a tiny size (~2 lines). Fix: capture the layout size from any tab's resize event and manually inject it into new terminals at creation time.
+Super/Win key is intercepted by Windows OS (Super+T opens taskbar, Super+R opens Run dialog). Ctrl+Shift+N was awkward to press and leaked ^N into the terminal. Alt is comfortable, conflict-free for the specific keys chosen (T, N, B, R, F, W, Left, Right, Minus, Equal), and matches the convention of many Linux window managers.
 
-### Connected tab styling
-Active tabs have `Radius::new(4.0).bottom(0.0)` (top rounded, bottom flat) and their background matches the terminal (`#181818`). The tab row has zero bottom padding. This makes the active tab visually merge into the terminal area — the Tabby look.
+### Why parallel Vec<PaneId> + Vec<ColumnWidth>?
+
+Each pane needs its own width, but PaperStrip stores pane IDs (not owned Pane objects). A parallel widths vector keeps width data co-located with the strip layout. Both vectors are always modified together (push, remove, swap).
+
+### Why spring animation?
+
+Cubic ease-out feels mechanical. Critically damped spring `1 - (1+8t)*exp(-8t)` matches niri's settling feel. At 60fps with 0.06 step per frame, animations take ~270ms.
+
+### Why session recovery via JSON?
+
+Workspaces, pane widths, focus indices, and CWDs are serialized to `~/.config/cratty/layout.json` on close. On startup, the layout is restored and new PTY backends are spawned for each saved pane. serde_json keeps it simple and human-readable.
 
 ## Comparison
 
 |                  | Tabby          | Cratty            |
 |------------------|----------------|-------------------|
-| Binary size      | ~200MB         | ~2.4MB            |
+| Binary size      | ~200MB         | ~3MB              |
 | Runtime          | Electron       | Native (wgpu)     |
 | Language         | TypeScript     | Rust              |
 | Memory           | ~300MB+        | ~30MB             |
 | Terminal engine  | xterm.js       | alacritty_terminal|
 | GUI framework    | Chromium       | iced 0.14         |
+| Layout model     | Tiling splits  | Paper WM          |
 | Architecture     | Component-based| Elm (functional)  |
-
-## Known Limitations
-
-### iced_term doesn't expose child PID
-The PTY child process PID is created internally in `Backend::new` and never surfaced. This blocks:
-- **Duplicate foreground process**: Can't detect what's running (e.g., vim, Claude Code) to re-launch it in the duplicated tab. Currently we only inherit the CWD by parsing the shell-reported title.
-- **Process-aware tab titles**: Can't show the foreground command name (like Tabby/iTerm2 do).
-- **Graceful close**: Can't send SIGHUP/SIGTERM to the child before closing.
-
-Workarounds considered:
-1. Fork iced_term to expose `tty::Pty` or at least the child PID
-2. On Windows: enumerate child processes of our own PID via `CreateToolhelp32Snapshot`, match by creation time against tab creation order — fragile
-3. On Linux: walk `/proc/<our_pid>/task/*/children` — simpler but platform-specific
-4. Build our own PTY layer (planned for Zig rewrite) with full process tree access
-
-### No OSC 7 (CWD reporting) support
-Modern shells can emit OSC 7 to report the current working directory. alacritty_terminal parses it but iced_term doesn't surface it as an event. This means CWD detection relies on title parsing, which is fragile across shell configurations.
-
-## Future Plans
-
-1. Wire cratty_core config into the app
-2. Split panes (horizontal/vertical)
-3. SSH client integration
-4. Settings panel
-5. Quake-mode dropdown terminal
-6. Full Zig rewrite using Ghostty's approach

@@ -8,30 +8,20 @@ Tracking issues discovered during paper WM implementation.
 
 - [ ] Sidebar has no resize handle - width is hardcoded at 200px
 - [ ] No visual indicator of which direction you can scroll (no peek of adjacent panes)
-- [ ] Home screen references "Ctrl+Shift+T" but that creates a workspace, not a pane
-- [ ] Unfocused panes show dim overlay but terminal cursor stays filled block (needs outline cursor)
 
 ### Behavior
 
-- [ ] Ctrl+Shift+N leaks ^N character into the terminal (keyboard event not consumed)
-- [ ] Ctrl+Shift+Left/Right may conflict with terminal apps that use those keys
-- [ ] No way to close individual panes from UI (only via shell exit)
-- [ ] No way to reorder panes within a strip
-- [ ] Workspace context menu (rename, color, delete) not yet added to sidebar
-
-### Paper WM Core
-
-- [ ] **True paper WM clipping not implemented** -- FillPortion divides space equally (tiling behavior). True paper WM needs each pane to keep its own width with viewport clipping. Requires scrollable support.
-- [ ] **Scrollable rendering with Canvas** -- Canvas uses local coords + with_translation (correct pattern). Not yet tested inside scrollable. See docs/iced-term-scrollable-investigation.md.
-- [ ] All panes are equal width - no configurable widths yet
-- [ ] No smooth scroll animation between panes
-- [ ] Scroll position not preserved when switching workspaces
-- [ ] Terminal resize feedback loop: never use terminal layout size for viewport width calculation (see iced-patterns.md)
+- [ ] Mouse support: click-to-position (SGR mouse protocol) not implemented
+- [ ] Text selection: click-drag to select text not implemented
+- [ ] Pane width changes snap instantly (should animate/lerp over ~200ms)
+- [ ] No drag-to-resize on pane edges
+- [ ] No right-click context menu on panes
+- [ ] Quake mode: config exists but logic not implemented
 
 ### Architecture
 
-- [ ] main.rs still ~290 lines (update function is the bulk)
-- [ ] term_canvas.rs uses hardcoded cell dimensions (8.2x18.2) - should measure from font
+- [ ] term_backend.rs at 112 lines (PTY wrapper, hard to split further)
+- [ ] Terminal resize feedback loop: never use terminal layout size for viewport width calculation (see iced-patterns.md)
 
 ## Completed
 
@@ -39,8 +29,6 @@ Tracking issues discovered during paper WM implementation.
 - [x] Titlebar simplified to window chrome only
 - [x] Pane dividers between terminals
 - [x] Focus indicator (blue border + dim overlay on unfocused)
-- [x] Ctrl+Shift+N to add pane to workspace
-- [x] Ctrl+Shift+Left/Right to navigate between panes
 - [x] Replaced iced_term with own Canvas-based renderer (PR #10)
 - [x] term_backend.rs wrapping alacritty_terminal directly
 - [x] term_canvas.rs drawing grid cells on iced Canvas
@@ -49,3 +37,30 @@ Tracking issues discovered during paper WM implementation.
 - [x] iced scrollable compression investigated (correct by design, closed iced-rs/iced#3299)
 - [x] iced_term coordinate bugs identified (Size::ZERO intrinsic + absolute coords in local frame)
 - [x] Viewport width feedback loop bug found and documented
+- [x] True paper WM: horizontal scrollable with per-pane widths
+- [x] Niri-style preset width cycling (1/3, 1/2, 2/3) + maximize toggle
+- [x] Alt+key shortcuts (T, N, B, R, F, W, Left, Right, Minus, Equal)
+- [x] Proper terminal input (ANSI escape sequences for named keys, Ctrl+letter)
+- [x] Space bar fix (Named::Space in iced)
+- [x] 256-color xterm palette (color cube + grayscale ramp)
+- [x] Text attributes: bold, dim, italic, underline, strikethrough, inverse
+- [x] Cursor shapes: filled block (focused) and hollow outline (unfocused)
+- [x] Dynamic font metrics from config (replaced hardcoded CELL_W/CELL_H)
+- [x] Config integration: AppConfig loaded on startup, shell profiles used for PTY
+- [x] Home screen shows correct shortcuts (Alt+T) with reference table
+- [x] Sidebar polish: active workspace background, accent bar width, brighter header
+- [x] Clipboard: Ctrl+Shift+C/V with bracketed paste support
+- [x] Mouse wheel scrollback (3 lines per notch, alternate screen guard)
+- [x] Shift+PageUp/Down keyboard scrollback
+- [x] Close focused pane (Alt+W)
+- [x] Reorder panes within strip (Alt+Shift+Left/Right)
+- [x] Workspace scroll position preserved across switches
+- [x] Spring animation (critically damped: 1-(1+8t)*exp(-8t))
+- [x] Session recovery: layout.json saved on close, restored on startup
+- [x] CWD tracking from terminal title events + inheritance for new panes
+- [x] 59 unit tests across 6 test files
+- [x] GitHub Actions CI (fmt, clippy, build, test, cross-platform)
+- [x] All source files at or under 100 lines
+- [x] config.rs split to comply with line limit
+- [x] Ctrl+Shift combos filtered from reaching PTY
+- [x] main.rs decomposed from ~290 lines to 100 lines across 8 modules
