@@ -55,7 +55,7 @@ impl canvas::Program<Message> for TermProgram {
             key, text, modifiers, ..
         }) = event
         {
-            if modifiers.alt() && !modifiers.control() && !modifiers.shift() {
+            if modifiers.alt() && !modifiers.control() {
                 return None;
             }
             if modifiers.control() && modifiers.shift() {

@@ -9,6 +9,7 @@ pub struct PaperStrip {
     pub viewport: ViewOffset,
     pub default_width: ColumnWidth,
     pub preset_widths: Vec<ColumnWidth>,
+    pub saved_scroll_x: f32,
     maximized: Option<(usize, ColumnWidth)>,
 }
 
@@ -18,7 +19,8 @@ impl PaperStrip {
         Self {
             panes: Vec::new(), widths: Vec::new(), focus_idx: 0,
             viewport: ViewOffset::default(),
-            default_width: presets[1], preset_widths: presets, maximized: None,
+            default_width: presets[1], preset_widths: presets,
+            saved_scroll_x: 0.0, maximized: None,
         }
     }
 
@@ -31,20 +33,13 @@ impl PaperStrip {
     }
 
     pub fn remove(&mut self, pane: PaneId) -> bool {
-        if let Some(idx) = self.panes.iter().position(|&p| p == pane) {
-            self.panes.remove(idx);
-            self.widths.remove(idx);
-            if self.panes.is_empty() {
-                self.focus_idx = 0;
-            } else if idx < self.focus_idx {
-                self.focus_idx -= 1;
-            } else if self.focus_idx >= self.panes.len() {
-                self.focus_idx = self.panes.len() - 1;
-            }
-            true
-        } else {
-            false
-        }
+        let Some(idx) = self.panes.iter().position(|&p| p == pane) else { return false };
+        self.panes.remove(idx);
+        self.widths.remove(idx);
+        if self.panes.is_empty() { self.focus_idx = 0; }
+        else if idx < self.focus_idx { self.focus_idx -= 1; }
+        else if self.focus_idx >= self.panes.len() { self.focus_idx = self.panes.len() - 1; }
+        true
     }
 
     pub fn focus_left(&mut self) -> bool {
@@ -63,12 +58,9 @@ impl PaperStrip {
 
     pub fn cycle_preset_width(&mut self) {
         if self.preset_widths.is_empty() || self.widths.is_empty() { return; }
-        let current = self.widths[self.focus_idx];
-        let pos = self.preset_widths.iter().position(|w| current.same_as(*w));
-        let next = match pos {
-            Some(i) => (i + 1) % self.preset_widths.len(),
-            None => 0,
-        };
+        let cur = self.widths[self.focus_idx];
+        let pos = self.preset_widths.iter().position(|w| cur.same_as(*w));
+        let next = pos.map_or(0, |i| (i + 1) % self.preset_widths.len());
         self.widths[self.focus_idx] = self.preset_widths[next];
         self.maximized = None;
     }
@@ -87,6 +79,19 @@ impl PaperStrip {
         let prev = self.widths[self.focus_idx];
         self.widths[self.focus_idx] = ColumnWidth::Proportion(1.0);
         self.maximized = Some((self.focus_idx, prev));
+    }
+
+    pub fn swap_left(&mut self) -> bool { self.swap_adjacent(false) }
+    pub fn swap_right(&mut self) -> bool { self.swap_adjacent(true) }
+
+    fn swap_adjacent(&mut self, right: bool) -> bool {
+        let target = if right { self.focus_idx + 1 } else { self.focus_idx.wrapping_sub(1) };
+        if target >= self.panes.len() { return false; }
+        self.panes.swap(self.focus_idx, target);
+        self.widths.swap(self.focus_idx, target);
+        self.focus_idx = target;
+        self.maximized = None;
+        true
     }
 }
 

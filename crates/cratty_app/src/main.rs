@@ -5,7 +5,7 @@ use iced::{Color, Element, Length, Subscription, Task, Theme};
 use cratty_core::{AppConfig, FontMetrics, IdGen, PaneId, Workspace, WorkspaceId};
 use term_backend::TermBackend;
 
-mod app_actions; mod app_keys; mod app_tick; mod app_update;
+mod app_actions; mod app_keys; mod app_tick; mod app_update; mod app_ws_ops;
 mod clipboard; mod clipboard_ops; mod home; mod message;
 mod pane; mod sidebar; mod strip_view;
 mod style; mod term_backend; mod term_canvas; mod term_colors;

@@ -19,7 +19,7 @@ impl ViewOffset {
         match self {
             Self::Static(x) => *x,
             Self::Animating { from, to, progress } => {
-                let t = ease_out(*progress);
+                let t = spring(*progress);
                 from + (to - from) * t
             }
         }
@@ -49,6 +49,8 @@ impl ViewOffset {
     }
 }
 
-fn ease_out(t: f32) -> f32 {
-    1.0 - (1.0 - t).powi(3)
+/// Critically damped spring: f(t) = 1 - (1 + a*t) * exp(-a*t), a = 8.
+fn spring(t: f32) -> f32 {
+    let a: f32 = 8.0;
+    1.0 - (1.0 + a * t) * (-a * t).exp()
 }

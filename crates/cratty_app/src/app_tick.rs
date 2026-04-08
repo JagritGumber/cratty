@@ -35,7 +35,7 @@ impl Cratty {
 
     pub fn tick_animations(&mut self) {
         if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-            ws.strip.viewport.tick(0.08);
+            ws.strip.viewport.tick(0.06);
         }
     }
 

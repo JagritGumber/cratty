@@ -31,10 +31,22 @@ pub fn subscription() -> Subscription<Message> {
                     }
                 }
             }
+            if modifiers.alt() && modifiers.shift() && !modifiers.control() {
+                if let keyboard::Key::Named(named) = &key {
+                    match named {
+                        keyboard::key::Named::ArrowLeft =>
+                            return Some(Message::MovePaneLeft),
+                        keyboard::key::Named::ArrowRight =>
+                            return Some(Message::MovePaneRight),
+                        _ => {}
+                    }
+                }
+            }
             if modifiers.alt() && !modifiers.control() && !modifiers.shift() {
                 if let keyboard::Key::Character(c) = &key {
                     match c.as_str().to_ascii_lowercase().as_str() {
                         "t" => return Some(Message::NewWorkspace),
+                        "w" => return Some(Message::CloseFocusedPane),
                         "n" => return Some(Message::NewPane),
                         "b" => return Some(Message::ToggleSidebar),
                         "r" => return Some(Message::CyclePresetWidth),
