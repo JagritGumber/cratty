@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex};
 
 use alacritty_terminal::event::Notify;
 use alacritty_terminal::event_loop::Notifier;
+use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::Term;
+use alacritty_terminal::term::{Term, TermMode};
 use iced::widget::canvas::{self, Canvas, Event, Geometry};
 use iced::{Element, Length, Rectangle};
 
@@ -22,6 +23,26 @@ struct TermProgram {
     metrics: FontMetrics,
 }
 
+impl TermProgram {
+    fn handle_wheel_scroll(
+        &self, delta: &iced::mouse::ScrollDelta,
+    ) -> Option<canvas::Action<Message>> {
+        let lines = match delta {
+            iced::mouse::ScrollDelta::Lines { y, .. } => (*y * 3.0) as i32,
+            iced::mouse::ScrollDelta::Pixels { y, .. } => {
+                let l = (*y / self.metrics.cell_h) as i32;
+                if l == 0 { return None; }
+                l
+            }
+        };
+        let mut t = self.term.lock();
+        if !t.mode().contains(TermMode::ALT_SCREEN) {
+            t.scroll_display(Scroll::Delta(lines));
+        }
+        Some(canvas::Action::request_redraw())
+    }
+}
+
 impl canvas::Program<Message> for TermProgram {
     type State = ();
 
@@ -37,10 +58,16 @@ impl canvas::Program<Message> for TermProgram {
             if modifiers.alt() && !modifiers.control() && !modifiers.shift() {
                 return None;
             }
+            if modifiers.control() && modifiers.shift() {
+                return None;
+            }
             if let Some(bytes) = term_input::key_to_bytes(key, modifiers, text) {
                 self.notifier.notify(Cow::Owned(bytes));
             }
             return Some(canvas::Action::request_redraw());
+        }
+        if let Event::Mouse(iced::mouse::Event::WheelScrolled { delta }) = event {
+            return self.handle_wheel_scroll(delta);
         }
         None
     }
@@ -66,7 +93,6 @@ pub fn view(
         focused,
         metrics,
     };
-
     Canvas::new(program)
         .width(Length::Fill)
         .height(Length::Fill)

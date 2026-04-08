@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::mpsc;
+use std::{collections::HashMap, sync::mpsc};
 
 use iced::widget::column;
 use iced::{Color, Element, Length, Subscription, Task, Theme};
@@ -7,10 +6,11 @@ use cratty_core::{AppConfig, FontMetrics, IdGen, PaneId, Workspace, WorkspaceId}
 use term_backend::TermBackend;
 
 mod app_actions; mod app_keys; mod app_tick; mod app_update;
-mod home; mod message; mod pane; mod sidebar; mod strip_view;
+mod clipboard; mod clipboard_ops; mod home; mod message;
+mod pane; mod sidebar; mod strip_view;
 mod style; mod term_backend; mod term_canvas; mod term_colors;
 mod term_cursor; mod term_decor; mod term_palette;
-mod term_input; mod term_widget; mod terminal; mod titlebar;
+mod term_input; mod term_scroll; mod term_widget; mod terminal; mod titlebar;
 mod widgets; mod ws_item; mod ws_menu;
 
 use message::Message;

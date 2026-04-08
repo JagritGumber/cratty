@@ -25,6 +25,10 @@ pub enum Message {
     Minimize,
     Maximize,
     CloseWindow,
+    ScrollTermUp,
+    ScrollTermDown,
+    CopyTerminal,
+    PasteTerminal,
     EscapePressed,
     Tick,
 }

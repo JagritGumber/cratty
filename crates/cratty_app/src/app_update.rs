@@ -1,6 +1,6 @@
+use alacritty_terminal::grid::Scroll;
 use iced::widget::{operation, scrollable};
-use iced::window;
-use iced::Task;
+use iced::{window, Task};
 
 use crate::message::Message;
 use crate::strip_view::strip_scroll_id;
@@ -44,6 +44,10 @@ impl Cratty {
                 }
                 Task::none()
             }
+            Message::ScrollTermUp => { self.scroll_focused_term(Scroll::PageUp); Task::none() }
+            Message::ScrollTermDown => { self.scroll_focused_term(Scroll::PageDown); Task::none() }
+            Message::CopyTerminal => { self.copy_focused_term(); Task::none() }
+            Message::PasteTerminal => { self.paste_to_focused_term(); Task::none() }
             Message::ToggleSidebar => {
                 self.sidebar_collapsed = !self.sidebar_collapsed; Task::none()
             }
@@ -71,16 +75,12 @@ impl Cratty {
             Message::ShowWsMenu(idx) => { self.ws_menu_idx = Some(idx); Task::none() }
             Message::HideWsMenu => { self.ws_menu_idx = None; Task::none() }
             Message::EscapePressed => {
-                self.ws_menu_idx = None;
-                self.renaming_ws = None;
-                self.rename_text.clear();
-                Task::none()
+                self.ws_menu_idx = None; self.renaming_ws = None;
+                self.rename_text.clear(); Task::none()
             }
             Message::Tick => {
-                self.poll_pending_backends();
-                self.tick_animations();
-                self.apply_pending_resizes();
-                self.process_terminal_events();
+                self.poll_pending_backends(); self.tick_animations();
+                self.apply_pending_resizes(); self.process_terminal_events();
                 Task::none()
             }
             Message::WindowResized(size) => { self.viewport_w = size.width; Task::none() }
@@ -92,12 +92,9 @@ impl Cratty {
     }
 }
 
-fn scroll_to_pane(strip: &cratty_core::PaperStrip, viewport_w: f32) -> Task<Message> {
-    let divider = 2.0;
-    let pane_start: f32 = (0..strip.focus_idx)
-        .map(|i| strip.pane_width_at(i, viewport_w) + divider)
-        .sum();
-    let pane_w = strip.pane_width_at(strip.focus_idx, viewport_w);
-    let x = (pane_start - (viewport_w - pane_w) / 2.0).max(0.0);
+fn scroll_to_pane(strip: &cratty_core::PaperStrip, vw: f32) -> Task<Message> {
+    let start: f32 = (0..strip.focus_idx)
+        .map(|i| strip.pane_width_at(i, vw) + 2.0).sum();
+    let x = (start - (vw - strip.pane_width_at(strip.focus_idx, vw)) / 2.0).max(0.0);
     operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
 }

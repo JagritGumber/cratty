@@ -11,6 +11,26 @@ pub fn subscription() -> Subscription<Message> {
             if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
                 return Some(Message::EscapePressed);
             }
+            if modifiers.shift() && !modifiers.alt() && !modifiers.control() {
+                if let keyboard::Key::Named(named) = &key {
+                    match named {
+                        keyboard::key::Named::PageUp =>
+                            return Some(Message::ScrollTermUp),
+                        keyboard::key::Named::PageDown =>
+                            return Some(Message::ScrollTermDown),
+                        _ => {}
+                    }
+                }
+            }
+            if modifiers.control() && modifiers.shift() && !modifiers.alt() {
+                if let keyboard::Key::Character(c) = &key {
+                    match c.as_str() {
+                        "C" | "c" => return Some(Message::CopyTerminal),
+                        "V" | "v" => return Some(Message::PasteTerminal),
+                        _ => {}
+                    }
+                }
+            }
             if modifiers.alt() && !modifiers.control() && !modifiers.shift() {
                 if let keyboard::Key::Character(c) = &key {
                     match c.as_str().to_ascii_lowercase().as_str() {
