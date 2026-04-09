@@ -67,8 +67,16 @@ fn rename_input(value: &str) -> Element<'_, Message> {
 }
 
 fn new_ws_button() -> Element<'static, Message> {
+    let icon = container(
+        text(ICO_PLUS).font(crate::widgets::PHOSPHOR).size(10)
+            .shaping(iced::widget::text::Shaping::Advanced),
+    )
+    .align_x(alignment::Horizontal::Center)
+    .align_y(alignment::Vertical::Center)
+    .width(Length::Shrink);
+
     button(
-        row![centered_icon(ICO_PLUS, 10.0), text("New workspace").size(11).color(FG_DIM)]
+        row![icon, text("New workspace").size(11).color(FG_DIM)]
             .spacing(6).align_y(alignment::Vertical::Center),
     )
     .on_press(Message::NewWorkspace)
