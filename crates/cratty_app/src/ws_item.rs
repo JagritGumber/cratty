@@ -34,8 +34,9 @@ pub fn view_ws_item(
     let max_title = 15_usize.saturating_sub(count_suffix.len());
     let label = truncate(title, max_title);
 
+    let menu_msg = if show_menu { Message::HideWsMenu } else { Message::ShowWsMenu(idx) };
     let menu_btn = button(centered_icon(ICO_DOTS_THREE, 10.0))
-        .on_press(Message::ShowWsMenu(idx))
+        .on_press(menu_msg)
         .width(20)
         .height(20)
         .padding(0)
