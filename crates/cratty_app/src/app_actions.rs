@@ -34,6 +34,7 @@ impl Cratty {
         self.workspaces.push(ws);
         self.active_ws = self.workspaces.len() - 1;
         self.spawn_backend(pane_id, cwd);
+        if let Some(ws) = self.workspaces.get_mut(self.active_ws) { ws.strip.viewport = cratty_core::ViewOffset::Static(0.0); }
         scroll_to_strip_start()
     }
 
@@ -45,26 +46,22 @@ impl Cratty {
             None => return self.create_workspace(cwd),
         };
         let inherited_cwd = cwd.or_else(|| {
-            ws.focused_pane()
-                .and_then(|pid| self.panes.get(&pid))
-                .and_then(|p| p.cwd.clone())
+            ws.focused_pane().and_then(|pid| self.panes.get(&pid)).and_then(|p| p.cwd.clone())
         });
         let pane_id = self.id_gen.next_pane();
         self.panes.insert(pane_id, Pane::new_loading(pane_id));
+        let ws = self.workspaces.get_mut(self.active_ws).unwrap();
         ws.strip.push(pane_id);
-        let divider = 2.0;
-        let x: f32 = (0..ws.strip.focus_idx)
-            .map(|i| ws.strip.pane_width_at(i, self.viewport_w) + divider)
-            .sum();
+        let vw = self.viewport_w;
+        let x: f32 = (0..ws.strip.focus_idx).map(|i| ws.strip.pane_width_at(i, vw) + 2.0).sum();
+        ws.strip.viewport = cratty_core::ViewOffset::Static(x);
         self.spawn_backend(pane_id, inherited_cwd);
-        operation::scroll_to(
-            strip_scroll_id(),
-            scrollable::AbsoluteOffset { x, y: 0.0 },
-        )
+        operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
     }
 
     pub fn close_workspace(&mut self, idx: usize) -> Task<Message> {
         if idx >= self.workspaces.len() { return Task::none(); }
+        self.ws_menu_idx = None;
         let active_id = self.workspaces.get(self.active_ws).map(|w| w.id);
         let ws = self.workspaces.remove(idx);
         for pane_id in &ws.strip.panes { self.panes.remove(pane_id); }

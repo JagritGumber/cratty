@@ -34,10 +34,11 @@ impl Cratty {
         });
     }
 
-    pub fn tick_animations(&mut self) {
-        if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-            ws.strip.viewport.tick(0.06);
-        }
+    pub fn tick_animations(&mut self) -> Option<f32> {
+        let ws = self.workspaces.get_mut(self.active_ws)?;
+        let was_animating = ws.strip.viewport.is_animating();
+        ws.strip.viewport.tick(0.07);
+        if was_animating { Some(ws.strip.viewport.current()) } else { None }
     }
 
     pub fn apply_pending_resizes(&mut self) {

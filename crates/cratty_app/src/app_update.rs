@@ -12,13 +12,14 @@ impl Cratty {
             Message::NewWorkspace => self.create_workspace(None),
             Message::CloseWorkspace(idx) => self.close_workspace(idx),
             Message::SwitchWorkspace(idx) => {
+                self.ws_menu_idx = None;
                 if idx >= self.workspaces.len() { return Task::none(); }
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
                     ws.strip.saved_scroll_x = compute_scroll_x(&ws.strip, self.viewport_w);
                 }
                 self.active_ws = idx;
-                let x = self.workspaces.get(self.active_ws)
-                    .map_or(0.0, |ws| ws.strip.saved_scroll_x);
+                let x = self.workspaces.get(self.active_ws).map_or(0.0, |ws| ws.strip.saved_scroll_x);
+                if let Some(ws) = self.workspaces.get_mut(self.active_ws) { ws.strip.viewport = cratty_core::ViewOffset::Static(x); }
                 operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
             }
             Message::NewPane => self.add_pane_to_active_workspace(None),
@@ -30,12 +31,14 @@ impl Cratty {
             Message::MovePaneLeft | Message::MovePaneRight => {
                 let ws = match self.workspaces.get_mut(self.active_ws) { Some(w) => w, None => return Task::none() };
                 let moved = if matches!(message, Message::MovePaneLeft) { ws.strip.swap_left() } else { ws.strip.swap_right() };
-                if moved { scroll_to_pane(&ws.strip, self.viewport_w) } else { Task::none() }
+                if moved { ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w)); }
+                Task::none()
             }
             Message::FocusPaneLeft | Message::FocusPaneRight => {
                 let ws = match self.workspaces.get_mut(self.active_ws) { Some(w) => w, None => return Task::none() };
                 let moved = if matches!(message, Message::FocusPaneLeft) { ws.strip.focus_left() } else { ws.strip.focus_right() };
-                if moved { ws.strip.viewport.animate_to(ws.strip.focus_idx as f32); scroll_to_pane(&ws.strip, self.viewport_w) } else { Task::none() }
+                if moved { ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w)); }
+                Task::none()
             }
             Message::CyclePresetWidth | Message::ToggleMaximizePane
             | Message::GrowPane | Message::ShrinkPane => {
@@ -46,7 +49,7 @@ impl Cratty {
                         Message::GrowPane => ws.strip.adjust_focused_width(0.1),
                         _ => ws.strip.adjust_focused_width(-0.1),
                     }
-                    return scroll_to_pane(&ws.strip, self.viewport_w);
+                    return scroll_to_pane(&mut ws.strip, self.viewport_w);
                 }
                 Task::none()
             }
@@ -67,9 +70,13 @@ impl Cratty {
             Message::HideWsMenu => { self.ws_menu_idx = None; Task::none() }
             Message::EscapePressed => self.handle_escape(),
             Message::Tick => {
-                self.poll_pending_backends(); self.tick_animations();
+                self.poll_pending_backends();
+                let scroll_x = self.tick_animations();
                 self.apply_pending_resizes(); self.process_terminal_events();
-                Task::none()
+                match scroll_x {
+                    Some(x) => operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 }),
+                    None => Task::none(),
+                }
             }
             Message::WindowResized(size) => { self.viewport_w = size.width; Task::none() }
             Message::DragWindow => with_window(window::drag),
@@ -89,7 +96,8 @@ fn compute_scroll_x(strip: &cratty_core::PaperStrip, vw: f32) -> f32 {
     (start - (vw - strip.pane_width_at(strip.focus_idx, vw)) / 2.0).max(0.0)
 }
 
-fn scroll_to_pane(strip: &cratty_core::PaperStrip, vw: f32) -> Task<Message> {
+fn scroll_to_pane(strip: &mut cratty_core::PaperStrip, vw: f32) -> Task<Message> {
     let x = compute_scroll_x(strip, vw);
+    strip.viewport = cratty_core::ViewOffset::Static(x);
     operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
 }

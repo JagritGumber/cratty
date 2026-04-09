@@ -19,7 +19,7 @@ impl ViewOffset {
         match self {
             Self::Static(x) => *x,
             Self::Animating { from, to, progress } => {
-                let t = spring(*progress);
+                let t = ease_out_quart(*progress);
                 from + (to - from) * t
             }
         }
@@ -38,6 +38,8 @@ impl ViewOffset {
         false
     }
 
+    pub fn is_animating(&self) -> bool { matches!(self, Self::Animating { .. }) }
+
     /// Start animating to a new target.
     pub fn animate_to(&mut self, target: f32) {
         let current = self.current();
@@ -49,8 +51,8 @@ impl ViewOffset {
     }
 }
 
-/// Critically damped spring: f(t) = 1 - (1 + a*t) * exp(-a*t), a = 8.
-fn spring(t: f32) -> f32 {
-    let a: f32 = 8.0;
-    1.0 - (1.0 + a * t) * (-a * t).exp()
+fn ease_out_quart(t: f32) -> f32 {
+    let inv = 1.0 - t;
+    let inv2 = inv * inv;
+    1.0 - inv2 * inv2
 }
