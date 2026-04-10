@@ -61,6 +61,13 @@ impl canvas::Program<Message> for TermProgram {
             if modifiers.control() && modifiers.shift() {
                 return None;
             }
+            if modifiers.control() && !modifiers.shift() {
+                if let iced::keyboard::Key::Character(c) = key {
+                    if c.as_str().eq_ignore_ascii_case("v") {
+                        return Some(canvas::Action::publish(Message::PasteTerminal));
+                    }
+                }
+            }
             if let Some(bytes) = term_input::key_to_bytes(key, modifiers, text) {
                 self.notifier.notify(Cow::Owned(bytes));
             }
