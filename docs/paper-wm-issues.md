@@ -14,6 +14,7 @@ Tracking issues discovered during paper WM implementation.
 - [ ] Mouse support: click-to-position (SGR mouse protocol) not implemented
 - [ ] Text selection: click-drag to select text not implemented
 - [ ] Pane width changes snap instantly (should animate/lerp over ~200ms)
+- [ ] Wispr Flow / STT tool support: test with Wispr Flow on Windows (Ctrl+V paste added, needs real-device validation)
 - [ ] No drag-to-resize on pane edges
 - [ ] No right-click context menu on panes
 - [ ] Quake mode: config exists but logic not implemented
@@ -55,7 +56,10 @@ Tracking issues discovered during paper WM implementation.
 - [x] Close focused pane (Alt+W)
 - [x] Reorder panes within strip (Alt+Shift+Left/Right)
 - [x] Workspace scroll position preserved across switches
-- [x] Spring animation (critically damped: 1-(1+8t)*exp(-8t))
+- [x] Scroll animation: replaced broken spring with ease-out-quart, wired ViewOffset to drive scrollable each tick
+- [x] Sidebar "New workspace" button: icon used Length::Fill causing 50/50 split with text, fixed to Shrink
+- [x] Workspace context menu stuck open: HideWsMenu was never sent, added toggle + clear on delete/switch
+- [x] Ctrl+V paste in terminal: intercept in canvas before raw byte reaches PTY (enables Wispr Flow STT support)
 - [x] Session recovery: layout.json saved on close, restored on startup
 - [x] CWD tracking from terminal title events + inheritance for new panes
 - [x] 59 unit tests across 6 test files
