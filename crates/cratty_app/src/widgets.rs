@@ -12,6 +12,7 @@ pub const ICO_SQUARE: char = '\u{E45E}';
 pub const ICO_X: char = '\u{E4F6}';
 pub const ICO_PLUS: char = '\u{E3D4}';
 pub const ICO_DOTS_THREE: char = '\u{E208}';
+pub const ICO_CARET_RIGHT: char = '\u{E13A}';
 
 pub fn centered_icon(codepoint: char, size: f32) -> Element<'static, Message> {
     container(

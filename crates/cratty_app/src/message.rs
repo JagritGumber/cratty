@@ -23,6 +23,7 @@ pub enum Message {
     SetWorkspaceColor(WorkspaceId, iced::Color),
     ShowWsMenu(usize),
     HideWsMenu,
+    ToggleColorSubmenu,
     WindowResized(iced::Size),
     DragWindow,
     Minimize,
@@ -33,5 +34,6 @@ pub enum Message {
     CopyTerminal,
     PasteTerminal,
     EscapePressed,
+    ToggleQuake,
     Tick,
 }
