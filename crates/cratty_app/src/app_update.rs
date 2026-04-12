@@ -1,7 +1,6 @@
 use alacritty_terminal::grid::Scroll;
 use iced::widget::{operation, scrollable};
 use iced::{window, Task};
-
 use crate::message::Message;
 use crate::strip_view::strip_scroll_id;
 use crate::{with_window, Cratty};
@@ -40,16 +39,16 @@ impl Cratty {
                 if moved { ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w)); }
                 Task::none()
             }
-            Message::CyclePresetWidth | Message::ToggleMaximizePane
-            | Message::GrowPane | Message::ShrinkPane => {
+            Message::CyclePresetWidth | Message::ToggleMaximizePane | Message::GrowPane | Message::ShrinkPane => {
+                let vw = self.viewport_w;
                 if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
                     match message {
-                        Message::CyclePresetWidth => ws.strip.cycle_preset_width(),
-                        Message::ToggleMaximizePane => ws.strip.toggle_maximize(),
-                        Message::GrowPane => ws.strip.adjust_focused_width(0.1),
-                        _ => ws.strip.adjust_focused_width(-0.1),
+                        Message::CyclePresetWidth => ws.strip.cycle_preset_width(vw),
+                        Message::ToggleMaximizePane => ws.strip.toggle_maximize(vw),
+                        Message::GrowPane => ws.strip.adjust_focused_width(0.1, vw),
+                        _ => ws.strip.adjust_focused_width(-0.1, vw),
                     }
-                    return scroll_to_pane(&mut ws.strip, self.viewport_w);
+                    ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, vw));
                 }
                 Task::none()
             }
@@ -57,17 +56,16 @@ impl Cratty {
             Message::ScrollTermDown => { self.scroll_focused_term(Scroll::PageDown); Task::none() }
             Message::CopyTerminal => { self.copy_focused_term(); Task::none() }
             Message::PasteTerminal => { self.paste_to_focused_term(); Task::none() }
-            Message::ToggleSidebar => {
-                self.sidebar_collapsed = !self.sidebar_collapsed; Task::none()
-            }
+            Message::ToggleSidebar => { self.sidebar_collapsed = !self.sidebar_collapsed; Task::none() }
             Message::RenameWorkspace(ws_id) => self.handle_rename_ws(ws_id),
             Message::RenameInput(text) => { self.rename_text = text; Task::none() }
             Message::RenameSubmit => self.handle_rename_submit(),
             Message::SetWorkspaceColor(ws_id, color) => {
-                self.ws_colors.insert(ws_id, color); self.ws_menu_idx = None; Task::none()
+                self.ws_colors.insert(ws_id, color); self.ws_menu_idx = None; self.color_submenu = false; Task::none()
             }
-            Message::ShowWsMenu(idx) => { self.ws_menu_idx = Some(idx); Task::none() }
-            Message::HideWsMenu => { self.ws_menu_idx = None; Task::none() }
+            Message::ShowWsMenu(idx) => { self.ws_menu_idx = Some(idx); self.color_submenu = false; Task::none() }
+            Message::HideWsMenu => { self.ws_menu_idx = None; self.color_submenu = false; Task::none() }
+            Message::ToggleColorSubmenu => { self.color_submenu = !self.color_submenu; Task::none() }
             Message::EscapePressed => self.handle_escape(),
             Message::Tick => {
                 self.poll_pending_backends();
@@ -82,10 +80,8 @@ impl Cratty {
             Message::DragWindow => with_window(window::drag),
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
-            Message::CloseWindow => {
-                self.save_layout();
-                with_window(window::close)
-            }
+            Message::CloseWindow => { self.save_layout(); with_window(window::close) }
+            Message::ToggleQuake => self.handle_toggle_quake()
         }
     }
 }
@@ -96,8 +92,3 @@ fn compute_scroll_x(strip: &cratty_core::PaperStrip, vw: f32) -> f32 {
     (start - (vw - strip.pane_width_at(strip.focus_idx, vw)) / 2.0).max(0.0)
 }
 
-fn scroll_to_pane(strip: &mut cratty_core::PaperStrip, vw: f32) -> Task<Message> {
-    let x = compute_scroll_x(strip, vw);
-    strip.viewport = cratty_core::ViewOffset::Static(x);
-    operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
-}
