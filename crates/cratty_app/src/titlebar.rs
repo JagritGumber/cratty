@@ -11,9 +11,9 @@ pub fn view_titlebar() -> Element<'static, Message> {
     let label = text("Cratty").size(12).color(FG_DIM);
 
     let controls = row![
-        win_btn(ICO_MINUS, Message::Minimize, FG_DIM, Color::from_rgb(0.2, 0.2, 0.2)),
-        win_btn(ICO_SQUARE, Message::Maximize, FG_DIM, Color::from_rgb(0.2, 0.2, 0.2)),
-        win_btn(ICO_X, Message::CloseWindow, FG_DIM, Color::from_rgb(0.7, 0.15, 0.15)),
+        win_btn(ICO_MINUS, Message::Minimize, FG_DIM, BG_MENU_HOVER),
+        win_btn(ICO_SQUARE, Message::Maximize, FG_DIM, BG_MENU_HOVER),
+        win_btn(ICO_X, Message::CloseWindow, FG_DIM, Color::from_rgb(0.78, 0.22, 0.22)),
     ]
     .spacing(0);
 
