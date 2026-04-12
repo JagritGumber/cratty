@@ -51,7 +51,7 @@ impl ViewOffset {
     }
 }
 
-fn ease_out_quart(t: f32) -> f32 {
+pub fn ease_out_quart(t: f32) -> f32 {
     let inv = 1.0 - t;
     let inv2 = inv * inv;
     1.0 - inv2 * inv2

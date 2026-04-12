@@ -38,6 +38,7 @@ impl Cratty {
         let ws = self.workspaces.get_mut(self.active_ws)?;
         let was_animating = ws.strip.viewport.is_animating();
         ws.strip.viewport.tick(0.07);
+        ws.strip.tick_width_anims(0.07);
         if was_animating { Some(ws.strip.viewport.current()) } else { None }
     }
 
