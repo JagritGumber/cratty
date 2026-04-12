@@ -5,14 +5,16 @@ use crate::paper_strip::PaperStrip;
 pub struct Workspace {
     pub id: WorkspaceId,
     pub name: String,
+    /// True if the name was auto-generated (e.g. "Terminal 1"); false if user-set.
+    /// When true, the sidebar prefers CWD basename for display.
+    pub auto_named: bool,
     pub strip: PaperStrip,
 }
 
 impl Workspace {
     pub fn new(id: WorkspaceId, name: String) -> Self {
         Self {
-            id,
-            name,
+            id, name, auto_named: true,
             strip: PaperStrip::new(),
         }
     }

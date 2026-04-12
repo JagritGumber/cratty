@@ -14,6 +14,7 @@ impl Cratty {
                 .collect();
             WorkspaceLayout {
                 name: ws.name.clone(),
+                auto_named: ws.auto_named,
                 panes,
                 focus_idx: ws.strip.focus_idx,
             }
@@ -41,6 +42,7 @@ impl Cratty {
             let mut ws = cratty_core::Workspace::new(
                 ws_id, ws_layout.name.clone(),
             );
+            ws.auto_named = ws_layout.auto_named;
             for pane_layout in &ws_layout.panes {
                 let pane_id = self.id_gen.next_pane();
                 self.panes.insert(

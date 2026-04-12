@@ -15,9 +15,13 @@ pub struct PaneLayout {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceLayout {
     pub name: String,
+    #[serde(default = "default_true")]
+    pub auto_named: bool,
     pub panes: Vec<PaneLayout>,
     pub focus_idx: usize,
 }
+
+fn default_true() -> bool { true }
 
 /// Serializable snapshot of the full window layout.
 #[derive(Debug, Clone, Serialize, Deserialize)]
