@@ -69,7 +69,7 @@ fn default_font_family() -> String { "JetBrains Mono".into() }
 fn default_font_size() -> f32 { 14.0 }
 fn default_theme() -> String { "default-dark".into() }
 fn default_scrollback() -> u32 { 10_000 }
-fn default_quake_hotkey() -> String { "F12".into() }
+fn default_quake_hotkey() -> String { "Ctrl+`".into() }
 fn default_quake_height() -> f32 { 0.4 }
 fn default_true() -> bool { true }
 
