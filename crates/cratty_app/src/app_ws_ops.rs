@@ -31,8 +31,26 @@ impl Cratty {
     }
 
     pub fn handle_escape(&mut self) -> Task<Message> {
+        if self.file_picker.is_some() { self.file_picker = None; return Task::none(); }
         self.ws_menu_idx = None; self.renaming_ws = None;
         self.color_submenu = false; self.rename_text.clear(); Task::none()
+    }
+
+    pub fn switch_workspace(&mut self, idx: usize) -> Task<Message> {
+        self.ws_menu_idx = None;
+        if idx >= self.workspaces.len() { return Task::none(); }
+        if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+            ws.strip.saved_scroll_x = crate::app_update::compute_scroll_x(&ws.strip, self.viewport_w);
+        }
+        self.active_ws = idx;
+        let x = self.workspaces.get(self.active_ws).map_or(0.0, |ws| ws.strip.saved_scroll_x);
+        if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
+            ws.strip.viewport = cratty_core::ViewOffset::Static(x);
+        }
+        iced::widget::operation::scroll_to(
+            crate::strip_view::strip_scroll_id(),
+            iced::widget::scrollable::AbsoluteOffset { x, y: 0.0 },
+        )
     }
 
     pub fn menu_overlay(&self) -> Option<Element<'_, Message>> {

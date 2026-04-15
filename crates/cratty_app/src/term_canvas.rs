@@ -29,7 +29,6 @@ pub fn draw_grid(
     *pending_resize.lock().unwrap() = Some((new_cols, new_rows));
 
     let mut frame = Frame::new(renderer, bounds.size());
-    frame.fill_rectangle(Point::ORIGIN, bounds.size(), BG);
 
     for indexed in grid.display_iter() {
         let flags = indexed.flags;

@@ -14,6 +14,16 @@ pub struct AppConfig {
     pub scrollback_lines: u32,
     #[serde(default)]
     pub quake_mode: QuakeModeConfig,
+    #[serde(default)]
+    pub editor: EditorConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorConfig {
+    #[serde(default = "default_editor_command")]
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +71,16 @@ impl Default for AppConfig {
             theme: default_theme(),
             scrollback_lines: default_scrollback(),
             quake_mode: QuakeModeConfig::default(),
+            editor: EditorConfig::default(),
+        }
+    }
+}
+
+impl Default for EditorConfig {
+    fn default() -> Self {
+        Self {
+            command: default_editor_command(),
+            args: Vec::new(),
         }
     }
 }
@@ -72,6 +92,7 @@ fn default_scrollback() -> u32 { 10_000 }
 fn default_quake_hotkey() -> String { "Ctrl+`".into() }
 fn default_quake_height() -> f32 { 0.4 }
 fn default_true() -> bool { true }
+fn default_editor_command() -> String { "hx".into() }
 
 fn default_shell_profiles() -> Vec<ShellProfile> {
     let mut profiles = Vec::new();

@@ -3,7 +3,7 @@ use iced::widget::{container, row, scrollable, text, Id, Space};
 use iced::{Color, Element, Length};
 use cratty_core::{FontMetrics, PaneId, PaperStrip};
 use crate::message::Message;
-use crate::pane::Pane;
+use crate::pane::{Pane, PaneContent};
 use crate::style::FG_MUTED;
 
 pub fn strip_scroll_id() -> Id { Id::new("paper-strip") }
@@ -42,15 +42,11 @@ pub fn view_strip<'a>(
 }
 
 fn render_pane(pane: &Pane, distance: f32, pane_w: f32, metrics: FontMetrics) -> Element<'_, Message> {
-    let focused_color = crate::style::ACCENT;
-    let unfocused_color = FG_MUTED;
-    let border_color = lerp_color(focused_color, unfocused_color, distance);
-    let border_w = 2.0 - distance;
-
     let focused = distance < 0.01;
-    let inner: Element<Message> = match &pane.backend {
-        Some(b) => crate::term_widget::view(b, focused, metrics),
-        None => container(text("Loading...").size(12).color(crate::style::FG_DIM))
+    let inner: Element<Message> = match &pane.content {
+        PaneContent::Terminal(b) => crate::term_widget::view(b, focused, metrics),
+        PaneContent::Editor(code) => crate::editor_widget::view(pane.id, code, metrics),
+        PaneContent::Loading => container(text("Loading...").size(12).color(crate::style::FG_DIM))
             .center(Length::Fill)
             .style(|_| container::Style {
                 background: Some(iced::Background::Color(crate::style::BG_TERMINAL)),
@@ -62,9 +58,6 @@ fn render_pane(pane: &Pane, distance: f32, pane_w: f32, metrics: FontMetrics) ->
         .width(Length::Fixed(pane_w)).height(Length::Fill)
         .style(move |_| container::Style {
             background: Some(iced::Background::Color(crate::style::BG_TERMINAL)),
-            border: iced::Border {
-                color: border_color, width: border_w, radius: 2.0.into(),
-            },
             ..Default::default()
         });
 
@@ -87,12 +80,8 @@ fn render_pane(pane: &Pane, distance: f32, pane_w: f32, metrics: FontMetrics) ->
     }
 }
 
-fn lerp_color(a: Color, b: Color, t: f32) -> Color {
-    Color::from_rgb(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t)
-}
-
 fn pane_divider() -> Element<'static, Message> {
-    container(Space::new()).width(2).height(Length::Fill).style(|_| container::Style {
+    container(Space::new()).width(1).height(Length::Fill).style(|_| container::Style {
         background: Some(iced::Background::Color(FG_MUTED)), ..Default::default()
     }).into()
 }

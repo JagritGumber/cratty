@@ -8,19 +8,14 @@ use crate::{with_window, Cratty};
 impl Cratty {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::NewWorkspace => self.create_workspace(None),
+            Message::NewWorkspace => Task::perform(
+                async { rfd::AsyncFileDialog::new().set_title("Pick project folder").pick_folder().await },
+                |opt| Message::WorkspaceFolderPicked(opt.map(|h| h.path().to_path_buf())),
+            ),
+            Message::WorkspaceFolderPicked(None) => Task::none(),
+            Message::WorkspaceFolderPicked(Some(path)) => self.create_workspace_with_root(path),
             Message::CloseWorkspace(idx) => self.close_workspace(idx),
-            Message::SwitchWorkspace(idx) => {
-                self.ws_menu_idx = None;
-                if idx >= self.workspaces.len() { return Task::none(); }
-                if let Some(ws) = self.workspaces.get_mut(self.active_ws) {
-                    ws.strip.saved_scroll_x = compute_scroll_x(&ws.strip, self.viewport_w);
-                }
-                self.active_ws = idx;
-                let x = self.workspaces.get(self.active_ws).map_or(0.0, |ws| ws.strip.saved_scroll_x);
-                if let Some(ws) = self.workspaces.get_mut(self.active_ws) { ws.strip.viewport = cratty_core::ViewOffset::Static(x); }
-                operation::scroll_to(strip_scroll_id(), scrollable::AbsoluteOffset { x, y: 0.0 })
-            }
+            Message::SwitchWorkspace(idx) => self.switch_workspace(idx),
             Message::NewPane => self.add_pane_to_active_workspace(None),
             Message::ClosePane(pid) => self.remove_pane(pid),
             Message::CloseFocusedPane => {
@@ -30,13 +25,19 @@ impl Cratty {
             Message::MovePaneLeft | Message::MovePaneRight => {
                 let ws = match self.workspaces.get_mut(self.active_ws) { Some(w) => w, None => return Task::none() };
                 let moved = if matches!(message, Message::MovePaneLeft) { ws.strip.swap_left() } else { ws.strip.swap_right() };
-                if moved { ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w)); }
+                if moved {
+                    ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w));
+                    return self.focus_focused_editor_pane();
+                }
                 Task::none()
             }
             Message::FocusPaneLeft | Message::FocusPaneRight => {
                 let ws = match self.workspaces.get_mut(self.active_ws) { Some(w) => w, None => return Task::none() };
                 let moved = if matches!(message, Message::FocusPaneLeft) { ws.strip.focus_left() } else { ws.strip.focus_right() };
-                if moved { ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w)); }
+                if moved {
+                    ws.strip.viewport.animate_to(compute_scroll_x(&ws.strip, self.viewport_w));
+                    return self.focus_focused_editor_pane();
+                }
                 Task::none()
             }
             Message::CyclePresetWidth | Message::ToggleMaximizePane | Message::GrowPane | Message::ShrinkPane => {
@@ -81,12 +82,20 @@ impl Cratty {
             Message::Minimize => with_window(|id| window::minimize(id, true)),
             Message::Maximize => with_window(window::toggle_maximize),
             Message::CloseWindow => { self.save_layout(); with_window(window::close) }
-            Message::ToggleQuake => self.handle_toggle_quake()
+            Message::ToggleQuake => self.handle_toggle_quake(),
+            Message::CodeAction(pid, action) => self.handle_code_action(pid, action),
+            Message::SaveFocusedFile => self.save_focused_file(),
+            Message::OpenFilePicker => self.open_file_picker(),
+            Message::FilePickerInput(q) => self.file_picker_input(q),
+            Message::FilePickerMove(d) => self.file_picker_move(d),
+            Message::FilePickerSelect(idx) => self.file_picker_select(idx),
+            Message::FilePickerOpen => self.file_picker_open(),
+            Message::FilePickerClose => self.file_picker_close(),
         }
     }
 }
 
-fn compute_scroll_x(strip: &cratty_core::PaperStrip, vw: f32) -> f32 {
+pub fn compute_scroll_x(strip: &cratty_core::PaperStrip, vw: f32) -> f32 {
     let start: f32 = (0..strip.focus_idx)
         .map(|i| strip.pane_width_at(i, vw) + 2.0).sum();
     (start - (vw - strip.pane_width_at(strip.focus_idx, vw)) / 2.0).max(0.0)

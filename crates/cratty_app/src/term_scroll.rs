@@ -15,7 +15,7 @@ impl Cratty {
             Some(pid) => pid,
             None => return,
         };
-        let backend = match self.panes.get(&pid).and_then(|p| p.backend.as_ref()) {
+        let backend = match self.panes.get(&pid).and_then(|p| p.terminal()) {
             Some(b) => b,
             None => return,
         };

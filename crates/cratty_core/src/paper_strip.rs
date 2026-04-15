@@ -55,6 +55,9 @@ impl PaperStrip {
     }
 
     pub fn is_empty(&self) -> bool { self.panes.is_empty() }
+    pub fn any_width_animating(&self) -> bool {
+        self.width_anims.iter().any(|anim| anim.is_some())
+    }
 
     pub fn pane_width_at(&self, i: usize, vw: f32) -> f32 {
         self.widths.get(i).copied().unwrap_or(self.default_width).resolve(vw)

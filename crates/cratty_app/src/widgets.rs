@@ -1,8 +1,9 @@
-use iced::widget::{button, container, text};
+use iced::widget::{button, column, container, text};
 use iced::{Color, Element, Font, Length};
 
 use crate::message::Message;
 use crate::style::*;
+use crate::{Toast, ToastKind};
 
 pub const PHOSPHOR_BOLD_BYTES: &[u8] = include_bytes!("../resources/fonts/Phosphor-Bold.ttf");
 pub const PHOSPHOR: Font = Font::with_name("Phosphor-Bold");
@@ -44,5 +45,50 @@ pub fn win_btn(
             },
             ..Default::default()
         })
+        .into()
+}
+
+pub fn view_toasts<'a>(toasts: &'a [Toast]) -> Element<'a, Message> {
+    let items = toasts.iter().map(|toast| {
+        let (accent, bg) = match toast.kind {
+            ToastKind::Info => (ACCENT, BG_TITLEBAR),
+            ToastKind::Success => (Color::from_rgb(0.596, 0.765, 0.475), BG_TITLEBAR),
+            ToastKind::Error => (Color::from_rgb(0.878, 0.424, 0.459), BG_TITLEBAR),
+        };
+
+        container(
+            text(&toast.message)
+                .size(12)
+                .color(FG_ACTIVE)
+        )
+        .padding([10, 12])
+        .width(Length::Fixed(320.0))
+        .style(move |_| container::Style {
+            background: Some(iced::Background::Color(bg)),
+            border: iced::Border {
+                color: accent,
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            shadow: iced::Shadow {
+                color: Color::from_rgba(0.0, 0.0, 0.0, 0.12),
+                offset: iced::Vector::new(0.0, 10.0),
+                blur_radius: 25.0,
+            },
+            ..Default::default()
+        })
+        .into()
+    });
+
+    container(column(items).spacing(8))
+        .padding(iced::Padding {
+            right: 18.0,
+            bottom: 18.0,
+            ..Default::default()
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_x(iced::alignment::Horizontal::Right)
+        .align_y(iced::alignment::Vertical::Bottom)
         .into()
 }

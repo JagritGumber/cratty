@@ -52,9 +52,12 @@ pub fn view_sidebar<'a>(
         .into()
 }
 
-/// Priority: user's custom name > CWD basename > workspace default name.
+/// Priority: user's custom name > workspace root basename > focused pane CWD basename > default.
 fn display_name(ws: &Workspace, panes: &HashMap<PaneId, Pane>) -> String {
     if !ws.auto_named { return ws.name.clone(); }
+    if let Some(root) = &ws.root {
+        if let Some(s) = root.file_name().and_then(|n| n.to_str()) { return s.to_string(); }
+    }
     ws.focused_pane().and_then(|pid| panes.get(&pid))
         .and_then(|p| p.cwd.as_ref())
         .and_then(|c| c.file_name().and_then(|n| n.to_str()).map(String::from))

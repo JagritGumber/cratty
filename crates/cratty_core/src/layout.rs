@@ -17,6 +17,8 @@ pub struct WorkspaceLayout {
     pub name: String,
     #[serde(default = "default_true")]
     pub auto_named: bool,
+    #[serde(default)]
+    pub root: Option<PathBuf>,
     pub panes: Vec<PaneLayout>,
     pub focus_idx: usize,
 }
