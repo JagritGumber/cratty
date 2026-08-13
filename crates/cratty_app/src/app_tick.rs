@@ -1,5 +1,6 @@
 use cratty_core::PaneId;
 
+use crate::pane::PaneContent;
 use crate::terminal;
 use crate::Cratty;
 
@@ -9,8 +10,10 @@ impl Cratty {
             match pending.rx.try_recv() {
                 Ok(Ok(backend)) => {
                     if let Some(pane) = self.panes.get_mut(&pending.pane_id) {
-                        pane.backend = Some(backend);
-                        pane.title = "Terminal".into();
+                        pane.content = PaneContent::Terminal(backend);
+                        if pane.title == "Loading..." {
+                            pane.title = "Terminal".into();
+                        }
                     }
                     false
                 }
@@ -38,6 +41,7 @@ impl Cratty {
         let ws = self.workspaces.get_mut(self.active_ws)?;
         let was_animating = ws.strip.viewport.is_animating();
         ws.strip.viewport.tick(0.07);
+        ws.strip.tick_width_anims(0.07);
         if was_animating { Some(ws.strip.viewport.current()) } else { None }
     }
 
@@ -45,7 +49,7 @@ impl Cratty {
         let cell_w = self.metrics.cell_w;
         let cell_h = self.metrics.cell_h;
         for pane in self.panes.values_mut() {
-            if let Some(backend) = &mut pane.backend {
+            if let Some(backend) = pane.terminal_mut() {
                 backend.apply_pending_resize(cell_w, cell_h);
             }
         }
@@ -55,7 +59,7 @@ impl Cratty {
         let pane_ids: Vec<PaneId> = self.panes.keys().copied().collect();
         for pid in pane_ids {
             let events = {
-                match self.panes.get(&pid).and_then(|p| p.backend.as_ref()) {
+                match self.panes.get(&pid).and_then(|p| p.terminal()) {
                     Some(backend) => backend.drain_events(),
                     None => continue,
                 }
@@ -69,15 +73,16 @@ impl Cratty {
                         }
                     }
                     alacritty_terminal::event::Event::Exit => {
-                        self.panes.remove(&pid);
-                        for ws in &mut self.workspaces {
-                            ws.strip.remove(pid);
-                        }
+                        let _ = self.remove_pane(pid);
                     }
                     _ => {}
                 }
             }
         }
+        self.process_lsp_events();
+        self.flush_lsp_work();
+        self.poll_pending_lsp_installs();
+        self.prune_toasts();
         for ws in self.workspaces.iter().filter(|ws| ws.is_empty()) {
             self.ws_colors.remove(&ws.id);
         }

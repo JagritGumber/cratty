@@ -1,8 +1,9 @@
+use std::path::PathBuf;
 use cratty_core::{PaneId, WorkspaceId};
-
 #[derive(Debug, Clone)]
 pub enum Message {
     NewWorkspace,
+    WorkspaceFolderPicked(Option<PathBuf>),
     CloseWorkspace(usize),
     SwitchWorkspace(usize),
     NewPane,
@@ -23,6 +24,7 @@ pub enum Message {
     SetWorkspaceColor(WorkspaceId, iced::Color),
     ShowWsMenu(usize),
     HideWsMenu,
+    ToggleColorSubmenu,
     WindowResized(iced::Size),
     DragWindow,
     Minimize,
@@ -33,5 +35,14 @@ pub enum Message {
     CopyTerminal,
     PasteTerminal,
     EscapePressed,
+    ToggleQuake,
+    CodeAction(PaneId, iced::widget::text_editor::Action),
+    SaveFocusedFile,
+    OpenFilePicker,
+    FilePickerInput(String),
+    FilePickerMove(i32),
+    FilePickerSelect(usize),
+    FilePickerOpen,
+    FilePickerClose,
     Tick,
 }

@@ -11,6 +11,7 @@ pub mod paper_strip;
 pub mod session;
 pub mod theme;
 pub mod view_offset;
+pub mod width_anim;
 pub mod workspace;
 
 pub use config::AppConfig;

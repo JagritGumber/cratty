@@ -1,11 +1,8 @@
 use std::collections::HashMap;
-
 use iced::alignment;
 use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
 use iced::{Color, Element, Length};
-
 use cratty_core::{PaneId, Workspace, WorkspaceId};
-
 use crate::message::Message;
 use crate::pane::Pane;
 use crate::style::*;
@@ -21,25 +18,22 @@ pub fn view_sidebar<'a>(
     menu_idx: Option<usize>,
 ) -> Element<'a, Message> {
     let header = row![
-        text("Workspaces").size(11).color(FG_INACTIVE),
+        text("Workspaces").size(13).color(FG_INACTIVE),
         Space::new().width(Length::Fill),
     ]
     .align_y(alignment::Vertical::Center)
-    .padding([6, 8]);
+    .padding([8, 10]);
 
     let mut items: Vec<Element<Message>> = workspaces.iter().enumerate()
         .map(|(idx, ws)| {
             if renaming == Some(ws.id) {
                 return rename_input(rename_text);
             }
-            let title = ws.focused_pane()
-                .and_then(|pid| panes.get(&pid))
-                .map(|p| p.display_title())
-                .unwrap_or(&ws.name);
+            let title = display_name(ws, panes);
             let color = colors.get(&ws.id).copied();
             let show_menu = menu_idx == Some(idx);
             ws_item::view_ws_item(
-                idx, ws.id, title, color, ws.strip.panes.len(),
+                idx, title, color, ws.strip.panes.len(),
                 idx == active, show_menu,
             )
         })
@@ -56,6 +50,18 @@ pub fn view_sidebar<'a>(
             ..Default::default()
         })
         .into()
+}
+
+/// Priority: user's custom name > workspace root basename > focused pane CWD basename > default.
+fn display_name(ws: &Workspace, panes: &HashMap<PaneId, Pane>) -> String {
+    if !ws.auto_named { return ws.name.clone(); }
+    if let Some(root) = &ws.root {
+        if let Some(s) = root.file_name().and_then(|n| n.to_str()) { return s.to_string(); }
+    }
+    ws.focused_pane().and_then(|pid| panes.get(&pid))
+        .and_then(|p| p.cwd.as_ref())
+        .and_then(|c| c.file_name().and_then(|n| n.to_str()).map(String::from))
+        .unwrap_or_else(|| ws.name.clone())
 }
 
 fn rename_input(value: &str) -> Element<'_, Message> {
@@ -76,11 +82,11 @@ fn new_ws_button() -> Element<'static, Message> {
     .width(Length::Shrink);
 
     button(
-        row![icon, text("New workspace").size(11).color(FG_DIM)]
-            .spacing(6).align_y(alignment::Vertical::Center),
+        row![icon, text("New workspace").size(13).color(FG_DIM)]
+            .spacing(8).align_y(alignment::Vertical::Center),
     )
     .on_press(Message::NewWorkspace)
-    .padding([6, 8]).width(Length::Fill)
+    .padding([8, 10]).width(Length::Fill)
     .style(|_, status| {
         let hovered = matches!(status, button::Status::Hovered);
         button::Style {

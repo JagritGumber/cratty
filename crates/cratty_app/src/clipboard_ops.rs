@@ -53,6 +53,6 @@ impl Cratty {
     fn focused_backend(&self) -> Option<&crate::term_backend::TermBackend> {
         let ws = self.workspaces.get(self.active_ws)?;
         let pid = ws.strip.focused_pane()?;
-        self.panes.get(&pid)?.backend.as_ref()
+        self.panes.get(&pid)?.terminal()
     }
 }

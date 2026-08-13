@@ -1,10 +1,9 @@
 use iced::widget::{button, column, container, row, text, Space};
 use iced::{Color, Element, Length};
-
 use cratty_core::WorkspaceId;
-
 use crate::message::Message;
 use crate::style::*;
+use crate::widgets::{ICO_CARET_RIGHT, PHOSPHOR, menu_surface_style};
 
 const PRESET_COLORS: [(Color, &str); 6] = [
     (Color::from_rgb(0.90, 0.30, 0.30), "Red"),
@@ -17,50 +16,53 @@ const PRESET_COLORS: [(Color, &str); 6] = [
 
 pub fn view_ws_menu(idx: usize, ws_id: WorkspaceId) -> Element<'static, Message> {
     let rename_btn = menu_item("Rename", Message::RenameWorkspace(ws_id));
+    let color_item = color_menu_trigger();
     let delete_btn = menu_item("Delete", Message::CloseWorkspace(idx));
 
-    let color_row: Element<Message> = row(
-        PRESET_COLORS.iter().map(|(color, _)| color_swatch(*color, ws_id)),
-    )
-    .spacing(4)
-    .into();
+    let content = column![rename_btn, color_item, delete_btn]
+        .spacing(4).padding([6, 6]).width(176);
 
-    let content = column![
-        rename_btn,
-        text("Color").size(10).color(FG_DIM),
-        color_row,
-        Space::new().height(4),
-        delete_btn,
-    ]
-    .spacing(4)
-    .padding(8)
-    .width(160);
-
-    container(content)
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(BG_TITLEBAR)),
-            border: iced::Border {
-                color: FG_MUTED,
-                width: 1.0,
-                radius: 6.0.into(),
-            },
-            ..Default::default()
-        })
-        .into()
+    container(content).style(menu_surface_style).into()
 }
 
-fn menu_item(label: &str, msg: Message) -> Element<'static, Message> {
-    button(text(label.to_string()).size(12))
-        .on_press(msg)
-        .padding([4, 8])
-        .width(Length::Fill)
+fn color_menu_trigger() -> Element<'static, Message> {
+    let label = row![
+        text("Color").size(12),
+        Space::new().width(Length::Fill),
+        text(ICO_CARET_RIGHT).font(PHOSPHOR).size(10).color(FG_DIM)
+            .shaping(text::Shaping::Advanced),
+    ]
+    .align_y(iced::alignment::Vertical::Center);
+
+    button(label).on_press(Message::ToggleColorSubmenu)
+        .padding([8, 12]).width(Length::Fill)
         .style(|_, status| button::Style {
             background: match status {
                 button::Status::Hovered => Some(iced::Background::Color(BG_MENU_HOVER)),
                 _ => None,
             },
             text_color: FG_ACTIVE,
-            border: iced::Border { radius: 4.0.into(), ..Default::default() },
+            border: iced::Border { radius: 8.0.into(), ..Default::default() },
+            ..Default::default()
+        })
+        .into()
+}
+
+pub fn view_color_submenu(ws_id: WorkspaceId) -> Element<'static, Message> {
+    let swatches = row(PRESET_COLORS.iter().map(|(c, _)| color_swatch(*c, ws_id))).spacing(6);
+    container(swatches).padding([10, 10]).style(menu_surface_style).into()
+}
+
+fn menu_item(label: &str, msg: Message) -> Element<'static, Message> {
+    button(text(label.to_string()).size(12))
+        .on_press(msg).padding([8, 12]).width(Length::Fill)
+        .style(|_, status| button::Style {
+            background: match status {
+                button::Status::Hovered => Some(iced::Background::Color(BG_MENU_HOVER)),
+                _ => None,
+            },
+            text_color: FG_ACTIVE,
+            border: iced::Border { radius: 8.0.into(), ..Default::default() },
             ..Default::default()
         })
         .into()
@@ -69,18 +71,12 @@ fn menu_item(label: &str, msg: Message) -> Element<'static, Message> {
 fn color_swatch(color: Color, ws_id: WorkspaceId) -> Element<'static, Message> {
     button(Space::new())
         .on_press(Message::SetWorkspaceColor(ws_id, color))
-        .width(18)
-        .height(18)
-        .padding(0)
+        .width(18).height(18).padding(0)
         .style(move |_, status| button::Style {
             background: Some(iced::Background::Color(color)),
             border: iced::Border {
-                color: match status {
-                    button::Status::Hovered => FG_ACTIVE,
-                    _ => Color::TRANSPARENT,
-                },
-                width: 2.0,
-                radius: 4.0.into(),
+                color: match status { button::Status::Hovered => FG_ACTIVE, _ => Color::TRANSPARENT },
+                width: 2.0, radius: 6.0.into(),
             },
             ..Default::default()
         })

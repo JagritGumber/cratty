@@ -1,7 +1,7 @@
 use iced::widget::canvas::{Frame, Path, Stroke};
 use iced::{Color, Point, Size};
 
-const CURSOR_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.8, 0.7);
+const CURSOR_COLOR: Color = Color::from_rgba(0.686, 0.675, 0.725, 0.7); // #afacb9
 
 /// Draw the terminal cursor at the given position.
 /// Focused panes get a filled block; unfocused panes get a hollow outline.

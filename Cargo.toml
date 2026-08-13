@@ -8,7 +8,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "MIT"
+license = "BUSL-1.1"
 rust-version = "1.85"
 
 [workspace.dependencies]
@@ -33,7 +33,7 @@ dirs = "6"
 notify = "7"
 
 # GUI
-iced = { version = "0.14", features = ["canvas", "advanced", "lazy", "tokio"] }
+iced = { version = "0.14", features = ["canvas", "advanced", "lazy", "tokio", "highlighter"] }
 iced_graphics = "0.14"
 iced_core = "0.14"
 
@@ -43,3 +43,12 @@ tokio = { version = "1", features = ["full"] }
 
 # Clipboard
 arboard = "3"
+
+# Global hotkeys
+global-hotkey = "0.6"
+
+# Native file dialogs
+rfd = "0.15"
+
+# .gitignore-aware file walking
+ignore = "0.4"

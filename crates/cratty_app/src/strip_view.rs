@@ -1,12 +1,9 @@
 use std::collections::HashMap;
-
 use iced::widget::{container, row, scrollable, text, Id, Space};
 use iced::{Color, Element, Length};
-
 use cratty_core::{FontMetrics, PaneId, PaperStrip};
-
 use crate::message::Message;
-use crate::pane::Pane;
+use crate::pane::{Pane, PaneContent};
 use crate::style::FG_MUTED;
 
 pub fn strip_scroll_id() -> Id { Id::new("paper-strip") }
@@ -22,34 +19,34 @@ pub fn view_strip<'a>(
     for (i, pane_id) in strip.panes.iter().enumerate() {
         if i > 0 { elements.push(pane_divider()); }
         if let Some(pane) = panes.get(pane_id) {
-            let pane_w = strip.pane_width_at(i, viewport_w);
+            let pane_w = strip.pane_width_rendered(i, viewport_w);
             let distance = if i == strip.focus_idx { 0.0 } else { 1.0 };
             elements.push(render_pane(pane, distance, pane_w, metrics));
         }
     }
 
-    scrollable(row(elements).spacing(0).height(Length::Fill))
+    let strip = scrollable(row(elements).spacing(0).height(Length::Fill))
         .direction(scrollable::Direction::Horizontal(
             scrollable::Scrollbar::new().width(0).scroller_width(0),
         ))
         .id(strip_scroll_id())
         .width(Length::Fill)
-        .height(Length::Fill)
+        .height(Length::Fill);
+
+    container(strip).width(Length::Fill).height(Length::Fill)
+        .style(|_| container::Style {
+            background: Some(iced::Background::Color(crate::style::BG_TITLEBAR)),
+            ..Default::default()
+        })
         .into()
 }
 
-fn render_pane(
-    pane: &Pane, distance: f32, pane_w: f32, metrics: FontMetrics,
-) -> Element<'_, Message> {
-    let focused_color = Color::from_rgb(0.30, 0.65, 0.90);
-    let unfocused_color = Color::from_rgb(0.15, 0.15, 0.15);
-    let border_color = lerp_color(focused_color, unfocused_color, distance);
-    let border_w = 2.0 - distance;
-
+fn render_pane(pane: &Pane, distance: f32, pane_w: f32, metrics: FontMetrics) -> Element<'_, Message> {
     let focused = distance < 0.01;
-    let inner: Element<Message> = match &pane.backend {
-        Some(b) => crate::term_widget::view(b, focused, metrics),
-        None => container(text("Loading...").size(12).color(crate::style::FG_DIM))
+    let inner: Element<Message> = match &pane.content {
+        PaneContent::Terminal(b) => crate::term_widget::view(b, focused, metrics),
+        PaneContent::Editor(code) => crate::editor_widget::view(pane.id, code, metrics),
+        PaneContent::Loading => container(text("Loading...").size(12).color(crate::style::FG_DIM))
             .center(Length::Fill)
             .style(|_| container::Style {
                 background: Some(iced::Background::Color(crate::style::BG_TERMINAL)),
@@ -60,9 +57,7 @@ fn render_pane(
     let term_view = container(inner)
         .width(Length::Fixed(pane_w)).height(Length::Fill)
         .style(move |_| container::Style {
-            border: iced::Border {
-                color: border_color, width: border_w, radius: 0.0.into(),
-            },
+            background: Some(iced::Background::Color(crate::style::BG_TERMINAL)),
             ..Default::default()
         });
 
@@ -85,15 +80,8 @@ fn render_pane(
     }
 }
 
-fn lerp_color(a: Color, b: Color, t: f32) -> Color {
-    Color::from_rgb(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t)
-}
-
 fn pane_divider() -> Element<'static, Message> {
-    container(Space::new()).width(2).height(Length::Fill)
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(FG_MUTED)),
-            ..Default::default()
-        })
-        .into()
+    container(Space::new()).width(1).height(Length::Fill).style(|_| container::Style {
+        background: Some(iced::Background::Color(FG_MUTED)), ..Default::default()
+    }).into()
 }

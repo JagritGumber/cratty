@@ -17,7 +17,7 @@ Tracking issues discovered during paper WM implementation.
 - [ ] Wispr Flow / STT tool support: test with Wispr Flow on Windows (Ctrl+V paste added, needs real-device validation)
 - [ ] No drag-to-resize on pane edges
 - [ ] No right-click context menu on panes
-- [ ] Quake mode: config exists but logic not implemented
+- [ ] Quake mode: visual position/size (slide-down dropdown style) not implemented; only window show/hide via global hotkey
 
 ### Architecture
 
@@ -60,6 +60,17 @@ Tracking issues discovered during paper WM implementation.
 - [x] Sidebar "New workspace" button: icon used Length::Fill causing 50/50 split with text, fixed to Shrink
 - [x] Workspace context menu stuck open: HideWsMenu was never sent, added toggle + clear on delete/switch
 - [x] Ctrl+V paste in terminal: intercept in canvas before raw byte reaches PTY (enables Wispr Flow STT support)
+- [x] Theme: Cratty Warm Dark (Zed One Dark base, warmed to purple-grey with #61afef accent)
+- [x] Custom iced theme palette so empty space matches content background
+- [x] ANSI 16-color palette ported to Zed One Dark
+- [x] Pane border visibility: BG_TITLEBAR strip background contrasts with BG_TERMINAL panes
+- [x] Workspace context menu polish: Zed-style padding (tight outer, roomy inner items)
+- [x] Color submenu with caret-right icon (Phosphor U+E13A) and click-toggle
+- [x] Layer-based popup system: opaque() wrapper for proper click+hover blocking
+- [x] Backdrop click dismissal that doesn't break menu interaction
+- [x] Aceternity-style soft shadows: 10% opacity, 25px blur, subtle white border
+- [x] Quake mode global hotkey: Ctrl+` via global-hotkey crate, configurable in config.yaml
+- [x] new modules: layers.rs (compose), quake.rs (global hotkey)
 - [x] Session recovery: layout.json saved on close, restored on startup
 - [x] CWD tracking from terminal title events + inheritance for new panes
 - [x] 59 unit tests across 6 test files

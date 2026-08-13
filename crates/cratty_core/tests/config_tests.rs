@@ -28,7 +28,7 @@ fn default_config_has_scrollback() {
 fn default_config_quake_mode_enabled() {
     let cfg = AppConfig::default();
     assert!(cfg.quake_mode.enabled);
-    assert_eq!(cfg.quake_mode.hotkey, "F12");
+    assert_eq!(cfg.quake_mode.hotkey, "Ctrl+`");
     assert!((cfg.quake_mode.height_percent - 0.4).abs() < 0.01);
 }
 

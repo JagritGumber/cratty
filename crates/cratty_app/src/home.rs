@@ -1,11 +1,11 @@
 use iced::widget::{button, column, container, row, text, Space};
-use iced::{alignment, Color, Element, Length};
+use iced::{alignment, Element, Length};
 
 use crate::message::Message;
 use crate::style::*;
 use crate::widgets::*;
 
-const ACCENT: Color = Color::from_rgb(0.30, 0.65, 0.90);
+use crate::style::ACCENT;
 
 pub fn view_home<'a>() -> Element<'a, Message> {
     let logo = text("Cratty")
@@ -58,17 +58,13 @@ pub fn view_home<'a>() -> Element<'a, Message> {
 
 fn action_btn_style(_: &iced::Theme, status: button::Status) -> button::Style {
     let bg = match status {
-        button::Status::Hovered => Color::from_rgb(0.18, 0.18, 0.18),
-        _ => Color::from_rgb(0.13, 0.13, 0.13),
+        button::Status::Hovered => BG_WS_ACTIVE,
+        _ => BG_MENU_HOVER,
     };
     button::Style {
         background: Some(iced::Background::Color(bg)),
         text_color: FG_ACTIVE,
-        border: iced::Border {
-            color: FG_MUTED,
-            width: 1.0,
-            radius: 6.0.into(),
-        },
+        border: iced::Border { radius: 6.0.into(), ..Default::default() },
         ..Default::default()
     }
 }
