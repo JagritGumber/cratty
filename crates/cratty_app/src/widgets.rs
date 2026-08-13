@@ -15,6 +15,57 @@ pub const ICO_PLUS: char = '\u{E3D4}';
 pub const ICO_DOTS_THREE: char = '\u{E208}';
 pub const ICO_CARET_RIGHT: char = '\u{E13A}';
 
+pub fn dialog_surface_style(_: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(BG_SURFACE)),
+        border: iced::Border {
+            color: BORDER_SOFT,
+            width: 1.0,
+            radius: 14.0.into(),
+        },
+        shadow: iced::Shadow {
+            color: SHADOW_SOFT,
+            offset: iced::Vector::new(0.0, 18.0),
+            blur_radius: 42.0,
+        },
+        ..Default::default()
+    }
+}
+
+pub fn menu_surface_style(_: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(BG_SURFACE)),
+        border: iced::Border {
+            color: BORDER_SOFT,
+            width: 1.0,
+            radius: 12.0.into(),
+        },
+        shadow: iced::Shadow {
+            color: SHADOW_SOFT,
+            offset: iced::Vector::new(0.0, 14.0),
+            blur_radius: 32.0,
+        },
+        ..Default::default()
+    }
+}
+
+pub fn tooltip_surface_style(_: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(BG_SURFACE_ALT)),
+        border: iced::Border {
+            color: BORDER_STRONG,
+            width: 1.0,
+            radius: 10.0.into(),
+        },
+        shadow: iced::Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.12),
+            offset: iced::Vector::new(0.0, 10.0),
+            blur_radius: 24.0,
+        },
+        ..Default::default()
+    }
+}
+
 pub fn centered_icon(codepoint: char, size: f32) -> Element<'static, Message> {
     container(
         text(codepoint)
@@ -51,9 +102,9 @@ pub fn win_btn(
 pub fn view_toasts<'a>(toasts: &'a [Toast]) -> Element<'a, Message> {
     let items = toasts.iter().map(|toast| {
         let (accent, bg) = match toast.kind {
-            ToastKind::Info => (ACCENT, BG_TITLEBAR),
-            ToastKind::Success => (Color::from_rgb(0.596, 0.765, 0.475), BG_TITLEBAR),
-            ToastKind::Error => (Color::from_rgb(0.878, 0.424, 0.459), BG_TITLEBAR),
+            ToastKind::Info => (ACCENT, BG_SURFACE),
+            ToastKind::Success => (Color::from_rgb(0.596, 0.765, 0.475), BG_SURFACE),
+            ToastKind::Error => (Color::from_rgb(0.878, 0.424, 0.459), BG_SURFACE),
         };
 
         container(
@@ -61,19 +112,19 @@ pub fn view_toasts<'a>(toasts: &'a [Toast]) -> Element<'a, Message> {
                 .size(12)
                 .color(FG_ACTIVE)
         )
-        .padding([10, 12])
-        .width(Length::Fixed(320.0))
+        .padding([11, 13])
+        .width(Length::Fixed(336.0))
         .style(move |_| container::Style {
             background: Some(iced::Background::Color(bg)),
             border: iced::Border {
                 color: accent,
                 width: 1.0,
-                radius: 8.0.into(),
+                radius: 12.0.into(),
             },
             shadow: iced::Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.12),
-                offset: iced::Vector::new(0.0, 10.0),
-                blur_radius: 25.0,
+                color: SHADOW_SOFT,
+                offset: iced::Vector::new(0.0, 14.0),
+                blur_radius: 30.0,
             },
             ..Default::default()
         })

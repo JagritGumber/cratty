@@ -4,6 +4,7 @@ use iced::{Element, Font, Length};
 use crate::message::Message;
 use crate::pane::CodePane;
 use crate::style::{BG_TERMINAL, FG_ACTIVE};
+use crate::widgets::tooltip_surface_style;
 use cratty_core::{FontMetrics, PaneId};
 
 pub fn editor_id(pane_id: PaneId) -> Id {
@@ -47,16 +48,8 @@ pub fn view<'a>(
                     .size(12)
                     .color(FG_ACTIVE)
             )
-            .padding([8, 10])
-            .style(|_| container::Style {
-                background: Some(iced::Background::Color(iced::Color::from_rgba(0.20, 0.184, 0.227, 0.98))),
-                border: iced::Border {
-                    color: iced::Color::from_rgba(1.0, 1.0, 1.0, 0.08),
-                    width: 1.0,
-                    radius: 6.0.into(),
-                },
-                ..Default::default()
-            })
+            .padding([9, 11])
+            .style(tooltip_surface_style)
             .into(),
         );
     }

@@ -4,7 +4,8 @@ use iced::{Element, Font, Length};
 
 use crate::file_picker::FilePickerState;
 use crate::message::Message;
-use crate::style::{BG_MENU_HOVER, BG_TITLEBAR, FG_ACTIVE, FG_DIM, FG_INACTIVE};
+use crate::style::{BACKDROP_DIM, BG_MENU_HOVER, BG_SURFACE_ALT, BORDER_SOFT, FG_ACTIVE, FG_DIM, FG_INACTIVE};
+use crate::widgets::dialog_surface_style;
 
 const PICKER_W: f32 = 1040.0;
 const PICKER_H: f32 = 600.0;
@@ -20,8 +21,22 @@ pub fn view<'a>(state: &'a FilePickerState) -> Element<'a, Message> {
         .on_submit(Message::FilePickerOpen)
         .font(Font::MONOSPACE)
         .size(15)
-        .padding([10, 12])
-        .width(Length::Fill);
+        .padding([12, 14])
+        .width(Length::Fill)
+        .style(|theme, status| {
+            let mut style = text_input::default(theme, status);
+            style.background = iced::Background::Color(BG_SURFACE_ALT);
+            style.border = iced::Border {
+                color: BORDER_SOFT,
+                width: 1.0,
+                radius: 10.0.into(),
+            };
+            style.icon = FG_DIM;
+            style.placeholder = FG_DIM;
+            style.value = FG_ACTIVE;
+            style.selection = iced::Color::from_rgba(0.78, 0.75, 0.84, 0.18);
+            style
+        });
 
     let mut items: Vec<Element<Message>> = Vec::with_capacity(state.filtered.len());
     for (row_idx, &file_idx) in state.filtered.iter().enumerate() {
@@ -49,38 +64,45 @@ pub fn view<'a>(state: &'a FilePickerState) -> Element<'a, Message> {
         )
             .on_press(Message::FilePickerSelect(row_idx))
             .width(Length::Fill)
-            .padding([7, 10])
+            .padding([9, 11])
             .style(move |_, _| button::Style {
                 background: if selected { Some(iced::Background::Color(BG_MENU_HOVER)) } else { None },
                 text_color: if selected { FG_ACTIVE } else { FG_INACTIVE },
-                border: iced::Border { radius: 6.0.into(), ..Default::default() },
+                border: iced::Border { radius: 8.0.into(), ..Default::default() },
                 ..Default::default()
             });
         items.push(item.into());
     }
-    let list = scrollable(column(items).spacing(3).padding([2, 0]))
+    let list = scrollable(column(items).spacing(4).padding([2, 0]))
         .height(Length::Fill)
         .width(Length::FillPortion(3));
 
-    let preview = container(
-        column![
-            text(&state.preview.title)
+    let preview = container(column![
+        text(&state.preview.title)
+            .font(Font::MONOSPACE)
+            .size(12)
+            .color(FG_DIM),
+        scrollable(
+            text(&state.preview.body)
                 .font(Font::MONOSPACE)
                 .size(13)
-                .color(FG_INACTIVE),
-            container(
-                text(&state.preview.body)
-                    .font(Font::MONOSPACE)
-                    .size(13)
-                    .color(FG_ACTIVE)
-            )
-            .height(Length::Fill)
-        ]
-        .spacing(8),
-    )
+                .color(FG_ACTIVE)
+        )
+        .height(Length::Fill)
+    ]
+    .spacing(10))
     .width(Length::FillPortion(2))
     .height(Length::Fill)
-    .padding([4, 4]);
+    .padding([14, 14])
+    .style(|_| container::Style {
+        background: Some(iced::Background::Color(BG_SURFACE_ALT)),
+        border: iced::Border {
+            color: BORDER_SOFT,
+            width: 1.0,
+            radius: 12.0.into(),
+        },
+        ..Default::default()
+    });
 
     let stats = text(format!("{} files", state.filtered.len()))
         .font(Font::MONOSPACE)
@@ -90,12 +112,10 @@ pub fn view<'a>(state: &'a FilePickerState) -> Element<'a, Message> {
     let body = row![
         container(list)
             .height(Length::Fill)
-            .padding([4, 4]),
-        container(preview)
-            .height(Length::Fill)
-            .padding([4, 4]),
+            .padding([0, 0]),
+        preview,
     ]
-    .spacing(10)
+    .spacing(16)
     .height(Length::Fill);
 
     let panel = container(
@@ -104,25 +124,12 @@ pub fn view<'a>(state: &'a FilePickerState) -> Element<'a, Message> {
             body,
             stats,
         ]
-        .spacing(8)
-        .padding(10),
+        .spacing(14)
+        .padding([16, 16]),
     )
         .width(Length::Fixed(PICKER_W))
         .height(Length::Fixed(PICKER_H))
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(BG_TITLEBAR)),
-            border: iced::Border {
-                radius: 8.0.into(),
-                color: iced::Color::from_rgba(1.0, 1.0, 1.0, 0.08),
-                width: 1.0,
-            },
-            shadow: iced::Shadow {
-                color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.1),
-                offset: iced::Vector::new(0.0, 10.0),
-                blur_radius: 25.0,
-            },
-            ..Default::default()
-        });
+        .style(dialog_surface_style);
 
     let centered = container(panel)
         .width(Length::Fill).height(Length::Fill)
@@ -135,7 +142,7 @@ pub fn view<'a>(state: &'a FilePickerState) -> Element<'a, Message> {
             .height(Length::Fill)
             .style(|_| container::Style {
                 background: Some(iced::Background::Color(
-                    iced::Color::from_rgba(0.0, 0.0, 0.0, 0.18),
+                    BACKDROP_DIM,
                 )),
                 ..Default::default()
             }),
